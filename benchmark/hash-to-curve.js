@@ -1,8 +1,8 @@
 import { run, mark, utils } from 'micro-bmark';
 import { hash_to_field } from '../abstract/hash-to-curve.js';
 import { hashToPrivateScalar } from '../abstract/modular.js';
-import { randomBytes } from '@noble/hashes/utils';
-import { sha256 } from '@noble/hashes/sha256';
+import { randomBytes } from '@openpgp/noble-hashes/utils';
+import { sha256 } from '@openpgp/noble-hashes/sha256';
 // import { generateData } from './_shared.js';
 import { hashToCurve as secp256k1 } from '../secp256k1.js';
 import { hashToCurve as p256 } from '../p256.js';

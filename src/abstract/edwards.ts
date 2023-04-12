@@ -4,22 +4,27 @@ import { mod } from './modular.js';
 import * as ut from './utils.js';
 import { ensureBytes, FHash, Hex } from './utils.js';
 import { Group, GroupConstructor, wNAF, BasicCurve, validateBasic, AffinePoint } from './curve.js';
+import { BigInteger } from '@openpgp/noble-hashes/biginteger';
 
 // Be friendly to bad ECMAScript parsers by not using bigint literals
 // prettier-ignore
-const _0n = BigInt(0), _1n = BigInt(1), _2n = BigInt(2), _8n = BigInt(8);
+const _0n = Object.freeze(BigInteger.new(0));
+const _1n = Object.freeze(BigInteger.new(1));
+const _2n = Object.freeze(BigInteger.new(2));
+const _3n = Object.freeze(BigInteger.new(3));
+const _8n = Object.freeze(BigInteger.new(8));
 
 // Edwards curves must declare params a & d.
-export type CurveType = BasicCurve<bigint> & {
-  a: bigint; // curve param a
-  d: bigint; // curve param d
+export type CurveType = BasicCurve<BigInteger> & {
+  a: BigInteger; // curve param a
+  d: BigInteger; // curve param d
   hash: FHash; // Hashing
   randomBytes: (bytesLength?: number) => Uint8Array; // CSPRNG
   adjustScalarBytes?: (bytes: Uint8Array) => Uint8Array; // clears bits to get valid field elemtn
   domain?: (data: Uint8Array, ctx: Uint8Array, phflag: boolean) => Uint8Array; // Used for hashing
-  uvRatio?: (u: bigint, v: bigint) => { isValid: boolean; value: bigint }; // Ratio √(u/v)
+  uvRatio?: (u: BigInteger, v: BigInteger) => { isValid: boolean; value: BigInteger }; // Ratio √(u/v)
   prehash?: FHash; // RFC 8032 pre-hashing of messages to sign() / verify()
-  mapToCurve?: (scalar: bigint[]) => AffinePoint<bigint>; // for hash-to-curve standard
+  mapToCurve?: (scalar: BigInteger[]) => AffinePoint<BigInteger>; // for hash-to-curve standard
 };
 
 // verification rule is either zip215 or rfc8032 / nist186-5. Consult fromHex:
@@ -31,8 +36,8 @@ function validateOpts(curve: CurveType) {
     curve,
     {
       hash: 'function',
-      a: 'bigint',
-      d: 'bigint',
+      a: 'BigInteger',
+      d: 'BigInteger',
       randomBytes: 'function',
     },
     {
@@ -48,26 +53,26 @@ function validateOpts(curve: CurveType) {
 
 // Instance of Extended Point with coordinates in X, Y, Z, T
 export interface ExtPointType extends Group<ExtPointType> {
-  readonly ex: bigint;
-  readonly ey: bigint;
-  readonly ez: bigint;
-  readonly et: bigint;
-  get x(): bigint;
-  get y(): bigint;
+  readonly ex: BigInteger;
+  readonly ey: BigInteger;
+  readonly ez: BigInteger;
+  readonly et: BigInteger;
+  get x(): BigInteger;
+  get y(): BigInteger;
   assertValidity(): void;
-  multiply(scalar: bigint): ExtPointType;
-  multiplyUnsafe(scalar: bigint): ExtPointType;
+  multiply(scalar: BigInteger): ExtPointType;
+  multiplyUnsafe(scalar: BigInteger): ExtPointType;
   isSmallOrder(): boolean;
   isTorsionFree(): boolean;
   clearCofactor(): ExtPointType;
-  toAffine(iz?: bigint): AffinePoint<bigint>;
+  toAffine(iz?: BigInteger): AffinePoint<BigInteger>;
   toRawBytes(isCompressed?: boolean): Uint8Array;
   toHex(isCompressed?: boolean): string;
 }
 // Static methods of Extended Point with coordinates in X, Y, Z, T
 export interface ExtPointConstructor extends GroupConstructor<ExtPointType> {
-  new (x: bigint, y: bigint, z: bigint, t: bigint): ExtPointType;
-  fromAffine(p: AffinePoint<bigint>): ExtPointType;
+  new (x: BigInteger, y: BigInteger, z: BigInteger, t: BigInteger): ExtPointType;
+  fromAffine(p: AffinePoint<BigInteger>): ExtPointType;
   fromHex(hex: Hex): ExtPointType;
   fromPrivateKey(privateKey: Hex): ExtPointType;
 }
@@ -88,7 +93,7 @@ export type CurveFn = {
     getExtendedPublicKey: (key: Hex) => {
       head: Uint8Array;
       prefix: Uint8Array;
-      scalar: bigint;
+      scalar: BigInteger;
       point: ExtPointType;
       pointBytes: Uint8Array;
     };
@@ -107,15 +112,16 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
     nByteLength,
     h: cofactor,
   } = CURVE;
-  const MASK = _2n << (BigInt(nByteLength * 8) - _1n);
+  const MASK = _2n.leftShift(BigInteger.new(nByteLength * 8).idec());
   const modP = Fp.create; // Function overrides
 
   // sqrt(u/v)
   const uvRatio =
     CURVE.uvRatio ||
-    ((u: bigint, v: bigint) => {
+    ((u: BigInteger, v: BigInteger) => {
       try {
-        return { isValid: true, value: Fp.sqrt(u * Fp.inv(v)) };
+        const res = { isValid: true, value: Fp.sqrt(u.mul(Fp.inv(v))) };
+        return res
       } catch (e) {
         return { isValid: false, value: _0n };
       }
@@ -127,17 +133,17 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
       if (ctx.length || phflag) throw new Error('Contexts/pre-hash are not supported');
       return data;
     }); // NOOP
-  const inBig = (n: bigint) => typeof n === 'bigint' && _0n < n; // n in [1..]
-  const inRange = (n: bigint, max: bigint) => inBig(n) && inBig(max) && n < max; // n in [1..max-1]
-  const in0MaskRange = (n: bigint) => n === _0n || inRange(n, MASK); // n in [0..MASK-1]
-  function assertInRange(n: bigint, max: bigint) {
+  const inBig = (n: BigInteger) => n instanceof BigInteger && n.gt(_0n); // n in [1..]
+  const inRange = (n: BigInteger, max: BigInteger) => inBig(n) && inBig(max) && n.lt(max); // n in [1..max-1]
+  const in0MaskRange = (n: BigInteger) => n.isZero() || inRange(n, MASK); // n in [0..MASK-1]
+  function assertInRange(n: BigInteger, max: BigInteger) {
     // n in [1..max-1]
     if (inRange(n, max)) return n;
     throw new Error(`Expected valid scalar < ${max}, got ${typeof n} ${n}`);
   }
-  function assertGE0(n: bigint) {
+  function assertGE0(n: BigInteger) {
     // n in [0..CURVE_ORDER-1]
-    return n === _0n ? n : assertInRange(n, CURVE_ORDER); // GE = prime subgroup, not full group
+    return n.isZero() ? n : assertInRange(n, CURVE_ORDER); // GE = prime subgroup, not full group
   }
   const pointPrecomputes = new Map<Point, Point[]>();
   function isPoint(other: unknown) {
@@ -146,14 +152,14 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
   // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy).
   // https://en.wikipedia.org/wiki/Twisted_Edwards_curve#Extended_coordinates
   class Point implements ExtPointType {
-    static readonly BASE = new Point(CURVE.Gx, CURVE.Gy, _1n, modP(CURVE.Gx * CURVE.Gy));
+    static readonly BASE = new Point(CURVE.Gx, CURVE.Gy, _1n, modP(CURVE.Gx.mul(CURVE.Gy)));
     static readonly ZERO = new Point(_0n, _1n, _1n, _0n); // 0, 1, 1, 0
 
     constructor(
-      readonly ex: bigint,
-      readonly ey: bigint,
-      readonly ez: bigint,
-      readonly et: bigint
+      readonly ex: BigInteger,
+      readonly ey: BigInteger,
+      readonly ez: BigInteger,
+      readonly et: BigInteger
     ) {
       if (!in0MaskRange(ex)) throw new Error('x required');
       if (!in0MaskRange(ey)) throw new Error('y required');
@@ -161,18 +167,18 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
       if (!in0MaskRange(et)) throw new Error('t required');
     }
 
-    get x(): bigint {
+    get x(): BigInteger {
       return this.toAffine().x;
     }
-    get y(): bigint {
+    get y(): BigInteger {
       return this.toAffine().y;
     }
 
-    static fromAffine(p: AffinePoint<bigint>): Point {
+    static fromAffine(p: AffinePoint<BigInteger>): Point {
       if (p instanceof Point) throw new Error('extended point not allowed');
       const { x, y } = p || {};
       if (!in0MaskRange(x) || !in0MaskRange(y)) throw new Error('invalid affine point');
-      return new Point(x, y, _1n, modP(x * y));
+      return new Point(x, y, _1n, modP(x.mul(y)));
     }
     static normalizeZ(points: Point[]): Point[] {
       const toInv = Fp.invertBatch(points.map((p) => p.ez));
@@ -197,18 +203,18 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
       // Equation in affine coordinates: ax² + y² = 1 + dx²y²
       // Equation in projective coordinates (X/Z, Y/Z, Z):  (aX² + Y²)Z² = Z⁴ + dX²Y²
       const { ex: X, ey: Y, ez: Z, et: T } = this;
-      const X2 = modP(X * X); // X²
-      const Y2 = modP(Y * Y); // Y²
-      const Z2 = modP(Z * Z); // Z²
-      const Z4 = modP(Z2 * Z2); // Z⁴
-      const aX2 = modP(X2 * a); // aX²
-      const left = modP(Z2 * modP(aX2 + Y2)); // (aX² + Y²)Z²
-      const right = modP(Z4 + modP(d * modP(X2 * Y2))); // Z⁴ + dX²Y²
-      if (left !== right) throw new Error('bad point: equation left != right (1)');
+      const X2 = modP(X.mul(X)); // X²
+      const Y2 = modP(Y.mul(Y)); // Y²
+      const Z2 = modP(Z.mul(Z)); // Z²
+      const Z4 = modP(Z2.mul(Z2)); // Z⁴
+      const aX2 = modP(X2.mul(a)); // aX²
+      const left = modP(Z2.mul(modP(aX2.add(Y2)))); // (aX² + Y²)Z²
+      const right = modP( Z4.add( modP( d.mul(modP(X2.mul(Y2)) )) ) ); // Z⁴ + dX²Y²
+      if (!left.equal(right)) throw new Error('bad point: equation left != right (1)');
       // In Extended coordinates we also have T, which is x*y=T/Z: check X*Y == Z*T
-      const XY = modP(X * Y);
-      const ZT = modP(Z * T);
-      if (XY !== ZT) throw new Error('bad point: equation left != right (2)');
+      const XY = modP(X.mul(Y));
+      const ZT = modP(Z.mul(T));
+      if (!XY.equal(ZT)) throw new Error('bad point: equation left != right (2)');
     }
 
     // Compare one point to another.
@@ -216,11 +222,11 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
       isPoint(other);
       const { ex: X1, ey: Y1, ez: Z1 } = this;
       const { ex: X2, ey: Y2, ez: Z2 } = other;
-      const X1Z2 = modP(X1 * Z2);
-      const X2Z1 = modP(X2 * Z1);
-      const Y1Z2 = modP(Y1 * Z2);
-      const Y2Z1 = modP(Y2 * Z1);
-      return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
+      const X1Z2 = modP(X1.mul(Z2));
+      const X2Z1 = modP(X2.mul(Z1));
+      const Y1Z2 = modP(Y1.mul(Z2));
+      const Y2Z1 = modP(Y2.mul(Z1));
+      return X1Z2.equal(X2Z1) && Y1Z2.equal(Y2Z1);
     }
 
     protected is0(): boolean {
@@ -229,7 +235,7 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
 
     negate(): Point {
       // Flips point sign to a negative one (-x, y in affine coords)
-      return new Point(modP(-this.ex), this.ey, this.ez, modP(-this.et));
+      return new Point(modP(this.ex.negate()), this.ey, this.ez, modP(this.et.negate()));
     }
 
     // Fast algo for doubling Extended Point.
@@ -238,19 +244,19 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
     double(): Point {
       const { a } = CURVE;
       const { ex: X1, ey: Y1, ez: Z1 } = this;
-      const A = modP(X1 * X1); // A = X12
-      const B = modP(Y1 * Y1); // B = Y12
-      const C = modP(_2n * modP(Z1 * Z1)); // C = 2*Z12
-      const D = modP(a * A); // D = a*A
-      const x1y1 = X1 + Y1;
-      const E = modP(modP(x1y1 * x1y1) - A - B); // E = (X1+Y1)2-A-B
-      const G = D + B; // G = D+B
-      const F = G - C; // F = G-C
-      const H = D - B; // H = D-B
-      const X3 = modP(E * F); // X3 = E*F
-      const Y3 = modP(G * H); // Y3 = G*H
-      const T3 = modP(E * H); // T3 = E*H
-      const Z3 = modP(F * G); // Z3 = F*G
+      const A = modP(X1.mul(X1)); // A = X12
+      const B = modP(Y1.mul(Y1)); // B = Y12
+      const C = modP(_2n.mul(modP(Z1.mul(Z1)))); // C = 2*Z12
+      const D = modP(a.mul(A)); // D = a*A
+      const x1y1 = X1.add(Y1);
+      const E = modP( modP( x1y1.mul(x1y1) ).sub(A).isub(B) ); // E = (X1+Y1)2-A-B
+      const G = D.add(B); // G = D+B
+      const F = G.sub(C); // F = G-C
+      const H = D.sub(B); // H = D-B
+      const X3 = modP(E.mul(F)); // X3 = E*F
+      const Y3 = modP(G.mul(H)); // Y3 = G*H
+      const T3 = modP(E.mul(H)); // T3 = E*H
+      const Z3 = modP(F.mul(G)); // Z3 = F*G
       return new Point(X3, Y3, Z3, T3);
     }
 
@@ -266,34 +272,34 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
       // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-4
       // Cost: 8M + 8add + 2*2.
       // Note: It does not check whether the `other` point is valid.
-      if (a === BigInt(-1)) {
-        const A = modP((Y1 - X1) * (Y2 + X2));
-        const B = modP((Y1 + X1) * (Y2 - X2));
-        const F = modP(B - A);
-        if (F === _0n) return this.double(); // Same point. Tests say it doesn't affect timing
-        const C = modP(Z1 * _2n * T2);
-        const D = modP(T1 * _2n * Z2);
-        const E = D + C;
-        const G = B + A;
-        const H = D - C;
-        const X3 = modP(E * F);
-        const Y3 = modP(G * H);
-        const T3 = modP(E * H);
-        const Z3 = modP(F * G);
+      if (a.equal(BigInteger.new(-1))) {
+        const A = modP( Y1.sub(X1).imul( Y2.add(X2) ) );
+        const B = modP( Y1.add(X1).imul( Y2.sub(X2) ) );
+        const F = modP(B.sub(A));
+        if (F.isZero()) return this.double(); // Same point. Tests say it doesn't affect timing
+        const C = modP( Z1.mul(_2n).imul(T2) );
+        const D = modP( T1.mul(_2n).imul(Z2) );
+        const E = D.add(C);
+        const G = B.add(A);
+        const H = D.sub(C);
+        const X3 = modP(E.mul(F));
+        const Y3 = modP(G.mul(H));
+        const T3 = modP(E.mul(H));
+        const Z3 = modP(F.mul(G));
         return new Point(X3, Y3, Z3, T3);
       }
-      const A = modP(X1 * X2); // A = X1*X2
-      const B = modP(Y1 * Y2); // B = Y1*Y2
-      const C = modP(T1 * d * T2); // C = T1*d*T2
-      const D = modP(Z1 * Z2); // D = Z1*Z2
-      const E = modP((X1 + Y1) * (X2 + Y2) - A - B); // E = (X1+Y1)*(X2+Y2)-A-B
-      const F = D - C; // F = D-C
-      const G = D + C; // G = D+C
-      const H = modP(B - a * A); // H = B-a*A
-      const X3 = modP(E * F); // X3 = E*F
-      const Y3 = modP(G * H); // Y3 = G*H
-      const T3 = modP(E * H); // T3 = E*H
-      const Z3 = modP(F * G); // Z3 = F*G
+      const A = modP(X1.mul(X2)); // A = X1*X2
+      const B = modP(Y1.mul(Y2)); // B = Y1*Y2
+      const C = modP(T1.mul(d).imul(T2)); // C = T1*d*T2
+      const D = modP(Z1.mul(Z2)); // D = Z1*Z2
+      const E = modP( X1.add(Y1).imul( X2.add(Y2) ).isub(A).isub(B) ); // E = (X1+Y1)*(X2+Y2)-A-B
+      const F = D.sub(C); // F = D-C
+      const G = D.add(C); // G = D+C
+      const H = modP(B.sub( a.mul(A) )); // H = B-a*A
+      const X3 = modP(E.mul(F)); // X3 = E*F
+      const Y3 = modP(G.mul(H)); // Y3 = G*H
+      const T3 = modP(E.mul(H)); // T3 = E*H
+      const Z3 = modP(F.mul(G)); // Z3 = F*G
 
       return new Point(X3, Y3, Z3, T3);
     }
@@ -302,12 +308,12 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
       return this.add(other.negate());
     }
 
-    private wNAF(n: bigint): { p: Point; f: Point } {
+    private wNAF(n: BigInteger): { p: Point; f: Point } {
       return wnaf.wNAFCached(this, pointPrecomputes, n, Point.normalizeZ);
     }
 
     // Constant-time multiplication.
-    multiply(scalar: bigint): Point {
+    multiply(scalar: BigInteger): Point {
       const { p, f } = this.wNAF(assertInRange(scalar, CURVE_ORDER));
       return Point.normalizeZ([p, f])[0];
     }
@@ -316,10 +322,10 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
     // It's faster, but should only be used when you don't care about
     // an exposed private key e.g. sig verification.
     // Does NOT allow scalars higher than CURVE.n.
-    multiplyUnsafe(scalar: bigint): Point {
+    multiplyUnsafe(scalar: BigInteger): Point {
       let n = assertGE0(scalar); // 0 <= scalar < CURVE.n
-      if (n === _0n) return I;
-      if (this.equals(I) || n === _1n) return this;
+      if (n.isZero()) return I;
+      if (this.equals(I) || n.isOne()) return this;
       if (this.equals(G)) return this.wNAF(n).p;
       return wnaf.unsafeLadder(this, n);
     }
@@ -340,21 +346,21 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
 
     // Converts Extended point to default (x, y) coordinates.
     // Can accept precomputed Z^-1 - for example, from invertBatch.
-    toAffine(iz?: bigint): AffinePoint<bigint> {
+    toAffine(iz?: BigInteger): AffinePoint<BigInteger> {
       const { ex: x, ey: y, ez: z } = this;
       const is0 = this.is0();
-      if (iz == null) iz = is0 ? _8n : (Fp.inv(z) as bigint); // 8 was chosen arbitrarily
-      const ax = modP(x * iz);
-      const ay = modP(y * iz);
-      const zz = modP(z * iz);
-      if (is0) return { x: _0n, y: _1n };
-      if (zz !== _1n) throw new Error('invZ was invalid');
+      if (iz == null) iz = is0 ? _8n : Fp.inv(z); // 8 was chosen arbitrarily
+      const ax = modP(x.mul(iz));
+      const ay = modP(y.mul(iz));
+      const zz = modP(z.mul(iz));
+      if (is0) return { x: _0n.clone(), y: _1n.clone() };
+      if (!zz.isOne()) throw new Error('invZ was invalid');
       return { x: ax, y: ay };
     }
 
     clearCofactor(): Point {
       const { h: cofactor } = CURVE;
-      if (cofactor === _1n) return this;
+      if (cofactor.isOne()) return this;
       return this.multiplyUnsafe(cofactor);
     }
 
@@ -368,7 +374,7 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
       const lastByte = hex[len - 1]; // select last byte
       normed[len - 1] = lastByte & ~0x80; // clear last bit
       const y = ut.bytesToNumberLE(normed);
-      if (y === _0n) {
+      if (y.isZero()) {
         // y=0 is allowed
       } else {
         // RFC8032 prohibits >= p, but ZIP215 doesn't
@@ -378,17 +384,17 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
 
       // Ed25519: x² = (y²-1)/(dy²+1) mod p. Ed448: x² = (y²-1)/(dy²-1) mod p. Generic case:
       // ax²+y²=1+dx²y² => y²-1=dx²y²-ax² => y²-1=x²(dy²-a) => x²=(y²-1)/(dy²-a)
-      const y2 = modP(y * y); // denominator is always non-0 mod p.
-      const u = modP(y2 - _1n); // u = y² - 1
-      const v = modP(d * y2 - a); // v = d y² + 1.
+      const y2 = modP(y.mul(y)); // denominator is always non-0 mod p.
+      const u = modP(y2.dec()); // u = y² - 1
+      const v = modP(d.mul(y2).isub(a)); // v = d y² + 1.
       let { isValid, value: x } = uvRatio(u, v); // √(u/v)
       if (!isValid) throw new Error('Point.fromHex: invalid y coordinate');
-      const isXOdd = (x & _1n) === _1n; // There are 2 square roots. Use x_0 bit to select proper
+      const isXOdd = !x.isEven(); // There are 2 square roots. Use x_0 bit to select proper
       const isLastByteOdd = (lastByte & 0x80) !== 0; // x_0, last bit
-      if (!zip215 && x === _0n && isLastByteOdd)
+      if (!zip215 && x.isZero() && isLastByteOdd)
         // if x=0 and x_0 = 1, fail
         throw new Error('Point.fromHex: x=0 and x_0=1');
-      if (isLastByteOdd !== isXOdd) x = modP(-x); // if x_0 != x mod 2, set x = p-x
+      if (isLastByteOdd !== isXOdd) x = modP(x.negate()); // if x_0 != x mod 2, set x = p-x
       return Point.fromAffine({ x, y });
     }
     static fromPrivateKey(privKey: Hex) {
@@ -396,8 +402,8 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
     }
     toRawBytes(): Uint8Array {
       const { x, y } = this.toAffine();
-      const bytes = ut.numberToBytesLE(y, Fp.BYTES); // each y has 2 x values (x, -y)
-      bytes[bytes.length - 1] |= x & _1n ? 0x80 : 0; // when compressing, it's enough to store y
+      const bytes = y.toUint8Array('le', Fp.BYTES); // each y has 2 x values (x, -y)
+      bytes[bytes.length - 1] |= x.isEven() ? 0 : 0x80; // when compressing, it's enough to store y
       return bytes; // and use the last byte to encode sign of x
     }
     toHex(): string {
@@ -407,11 +413,11 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
   const { BASE: G, ZERO: I } = Point;
   const wnaf = wNAF(Point, nByteLength * 8);
 
-  function modN(a: bigint) {
+  function modN(a: BigInteger) {
     return mod(a, CURVE_ORDER);
   }
   // Little-endian SHA512 with modulo n
-  function modN_LE(hash: Uint8Array): bigint {
+  function modN_LE(hash: Uint8Array): BigInteger {
     return modN(ut.bytesToNumberLE(hash));
   }
 
@@ -449,9 +455,9 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
     const r = hashDomainToScalar(options.context, prefix, msg); // r = dom2(F, C) || prefix || PH(M)
     const R = G.multiply(r).toRawBytes(); // R = rG
     const k = hashDomainToScalar(options.context, R, pointBytes, msg); // R || A || PH(M)
-    const s = modN(r + k * scalar); // S = (r + k * s) mod L
+    const s = modN(r.add( k.mul(scalar) )); // S = (r + k * s) mod L
     assertGE0(s); // 0 <= s < l
-    const res = ut.concatBytes(R, ut.numberToBytesLE(s, Fp.BYTES));
+    const res = ut.concatBytes(R, s.toUint8Array('le', Fp.BYTES));
     return ensureBytes('result', res, nByteLength * 2); // 64-byte signature
   }
 
@@ -497,7 +503,7 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
      */
     precompute(windowSize = 8, point = Point.BASE): typeof Point.BASE {
       point._setWindowSize(windowSize);
-      point.multiply(BigInt(3));
+      point.multiply(_3n);
       return point;
     },
   };

@@ -1,6 +1,7 @@
 /*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */
-import { shake256 } from '@noble/hashes/sha3';
-import { concatBytes, randomBytes, utf8ToBytes, wrapConstructor } from '@noble/hashes/utils';
+import { BigInteger } from '@openpgp/noble-hashes/biginteger';
+import { shake256 } from '@openpgp/noble-hashes/sha3';
+import { concatBytes, randomBytes, utf8ToBytes, wrapConstructor } from '@openpgp/noble-hashes/utils';
 import { ExtPointType, twistedEdwards } from './abstract/edwards.js';
 import { mod, pow2, Field, isNegativeLE } from './abstract/modular.js';
 import { montgomery } from './abstract/montgomery.js';
@@ -25,33 +26,33 @@ import { AffinePoint, Group } from './abstract/curve.js';
 
 const shake256_114 = wrapConstructor(() => shake256.create({ dkLen: 114 }));
 const shake256_64 = wrapConstructor(() => shake256.create({ dkLen: 64 }));
-const ed448P = BigInt(
+const ed448P = BigInteger.new(
   '726838724295606890549323807888004534353641360687318060281490199180612328166730772686396383698676545930088884461843637361053498018365439'
 );
 
 // prettier-ignore
-const _1n = BigInt(1), _2n = BigInt(2), _3n = BigInt(3), _4n = BigInt(4), _11n = BigInt(11);
+const _1n = BigInteger.new(1), _2n = BigInteger.new(2), _3n = BigInteger.new(3), _11n = BigInteger.new(11);
 // prettier-ignore
-const _22n = BigInt(22), _44n = BigInt(44), _88n = BigInt(88), _223n = BigInt(223);
+const _22n = BigInteger.new(22), _44n = BigInteger.new(44), _88n = BigInteger.new(88), _223n = BigInteger.new(223);
 
 // powPminus3div4 calculates z = x^k mod p, where k = (p-3)/4.
 // Used for efficient square root calculation.
 // ((P-3)/4).toString(2) would produce bits [223x 1, 0, 222x 1]
-function ed448_pow_Pminus3div4(x: bigint): bigint {
+function ed448_pow_Pminus3div4(x: BigInteger): BigInteger {
   const P = ed448P;
-  const b2 = (x * x * x) % P;
-  const b3 = (b2 * b2 * x) % P;
-  const b6 = (pow2(b3, _3n, P) * b3) % P;
-  const b9 = (pow2(b6, _3n, P) * b3) % P;
-  const b11 = (pow2(b9, _2n, P) * b2) % P;
-  const b22 = (pow2(b11, _11n, P) * b11) % P;
-  const b44 = (pow2(b22, _22n, P) * b22) % P;
-  const b88 = (pow2(b44, _44n, P) * b44) % P;
-  const b176 = (pow2(b88, _88n, P) * b88) % P;
-  const b220 = (pow2(b176, _44n, P) * b44) % P;
-  const b222 = (pow2(b220, _2n, P) * b2) % P;
-  const b223 = (pow2(b222, _1n, P) * x) % P;
-  return (pow2(b223, _223n, P) * b222) % P;
+  const b2 = x.modExp(_3n, P);
+  const b3 = b2.mul(b2).imul(x).imod(P);
+  const b6 = pow2(b3, _3n, P).imul(b3).imod(P);
+  const b9 = pow2(b6, _3n, P).imul(b3).imod(P);
+  const b11 = pow2(b9, _2n, P).imul(b2).imod(P);
+  const b22 = pow2(b11, _11n, P).imul(b11).imod(P);
+  const b44 = pow2(b22, _22n, P).imul(b22).imod(P);
+  const b88 = pow2(b44, _44n, P).imul(b44).imod(P);
+  const b176 = pow2(b88, _88n, P).imul(b88).imod(P);
+  const b220 = pow2(b176, _44n, P).imul(b44).imod(P);
+  const b222 = pow2(b220, _2n, P).imul(b2).imod(P);
+  const b223 = pow2(b222, _1n, P).imul(x).imod(P);
+  return pow2(b223, _223n, P).imul(b222).imod(P);
 }
 
 function adjustScalarBytes(bytes: Uint8Array): Uint8Array {
@@ -67,7 +68,7 @@ function adjustScalarBytes(bytes: Uint8Array): Uint8Array {
 
 // Constant-time ratio of u to v. Allows to combine inversion and square root u/√v.
 // Uses algo from RFC8032 5.1.3.
-function uvRatio(u: bigint, v: bigint): { isValid: boolean; value: bigint } {
+function uvRatio(u: BigInteger, v: BigInteger): { isValid: boolean; value: BigInteger } {
   const P = ed448P;
   // https://www.rfc-editor.org/rfc/rfc8032#section-5.2.3
   // To compute the square root of (u/v), the first step is to compute the
@@ -75,43 +76,43 @@ function uvRatio(u: bigint, v: bigint): { isValid: boolean; value: bigint } {
   // following trick, to use a single modular powering for both the
   // inversion of v and the square root:
   // x = (u/v)^((p+1)/4)   = u³v(u⁵v³)^((p-3)/4)   (mod p)
-  const u2v = mod(u * u * v, P); // u²v
-  const u3v = mod(u2v * u, P); // u³v
-  const u5v3 = mod(u3v * u2v * v, P); // u⁵v³
+  const u2v = mod(u.mul(u).imul(v), P); // u²v
+  const u3v = mod(u2v.mul(u), P); // u³v
+  const u5v3 = mod(u3v.mul(u2v).imul(v), P); // u⁵v³
   const root = ed448_pow_Pminus3div4(u5v3);
-  const x = mod(u3v * root, P);
+  const x = mod(u3v.mul(root), P);
   // Verify that root is exists
-  const x2 = mod(x * x, P); // x²
+  const x2 = mod(x.mul(x), P); // x²
   // If vx² = u, the recovered x-coordinate is x.  Otherwise, no
   // square root exists, and the decoding fails.
-  return { isValid: mod(x2 * v, P) === u, value: x };
+  return { isValid: mod(x2.mul(v), P).equal(u), value: x };
 }
 
 const Fp = Field(ed448P, 456, true);
 
 const ED448_DEF = {
   // Param: a
-  a: BigInt(1),
+  a: BigInteger.new(1),
   // -39081. Negative number is P - number
-  d: BigInt(
+  d: BigInteger.new(
     '726838724295606890549323807888004534353641360687318060281490199180612328166730772686396383698676545930088884461843637361053498018326358'
   ),
   // Finite field 𝔽p over which we'll do calculations; 2n**448n - 2n**224n - 1n
   Fp,
   // Subgroup order: how many points curve has;
   // 2n**446n - 13818066809895115352007386748515426880336692474882178609894547503885n
-  n: BigInt(
+  n: BigInteger.new(
     '181709681073901722637330951972001133588410340171829515070372549795146003961539585716195755291692375963310293709091662304773755859649779'
   ),
   // RFC 7748 has 56-byte keys, RFC 8032 has 57-byte keys
   nBitLength: 456,
   // Cofactor
-  h: BigInt(4),
+  h: BigInteger.new(4),
   // Base point (x, y) aka generator point
-  Gx: BigInt(
+  Gx: BigInteger.new(
     '224580040295924300187604334099896036246789641632564134246125461686950415467406032909029192869357953282578032075146446173674602635247710'
   ),
-  Gy: BigInt(
+  Gy: BigInteger.new(
     '298819210078481492676017930443930673437544040154080242095928241372331506189835876003536878655418784733982303233503462500531545062832660'
   ),
   // SHAKE256(dom4(phflag,context)||x, 114)
@@ -137,21 +138,20 @@ export const ed448ph = /* @__PURE__ */ twistedEdwards({ ...ED448_DEF, prehash: s
 
 export const x448 = /* @__PURE__ */ (() =>
   montgomery({
-    a: BigInt(156326),
-    // RFC 7748 has 56-byte keys, RFC 8032 has 57-byte keys
+    a: BigInteger.new(156326),
     montgomeryBits: 448,
     nByteLength: 56,
     P: ed448P,
-    Gu: BigInt(5),
-    powPminus2: (x: bigint): bigint => {
+    Gu: BigInteger.new(5),
+    powPminus2: (x: BigInteger): BigInteger => {
       const P = ed448P;
       const Pminus3div4 = ed448_pow_Pminus3div4(x);
-      const Pminus3 = pow2(Pminus3div4, BigInt(2), P);
-      return mod(Pminus3 * x, P); // Pminus3 * x = Pminus2
+      const Pminus3 = pow2(Pminus3div4, BigInteger.new(2), P);
+      return mod(Pminus3.mul(x), P); // Pminus3 * x = Pminus2
     },
     adjustScalarBytes,
     randomBytes,
-  }))();
+}))();
 
 /**
  * Converts edwards448 public key to x448 public key. Uses formula:
@@ -163,18 +163,19 @@ export const x448 = /* @__PURE__ */ (() =>
  */
 export function edwardsToMontgomeryPub(edwardsPub: string | Uint8Array): Uint8Array {
   const { y } = ed448.ExtendedPoint.fromHex(edwardsPub);
-  const _1n = BigInt(1);
-  return Fp.toBytes(Fp.create((y - _1n) * Fp.inv(y + _1n)));
+  return Fp.toBytes(Fp.create( y.dec().imul( Fp.inv(y.inc()) )));
 }
 
 export const edwardsToMontgomery = edwardsToMontgomeryPub; // deprecated
 // TODO: add edwardsToMontgomeryPriv, similar to ed25519 version
 
-// Hash To Curve Elligator2 Map
-const ELL2_C1 = (Fp.ORDER - BigInt(3)) / BigInt(4); // 1. c1 = (q - 3) / 4         # Integer arithmetic
-const ELL2_J = BigInt(156326);
+const _4n = Object.freeze(BigInteger.new(4));
 
-function map_to_curve_elligator2_curve448(u: bigint) {
+// Hash To Curve Elligator2 Map
+const ELL2_C1 = Fp.ORDER.sub(_3n).irightShift(_2n); // 1. c1 = (q - 3) / 4         # Integer arithmetic
+const ELL2_J = BigInteger.new(156326);
+
+function map_to_curve_elligator2_curve448(u: BigInteger) {
   let tv1 = Fp.sqr(u); // 1.  tv1 = u^2
   let e1 = Fp.eql(tv1, Fp.ONE); // 2.   e1 = tv1 == 1
   tv1 = Fp.cmov(tv1, Fp.ZERO, e1); // 3.  tv1 = CMOV(tv1, 0, e1)  # If Z * u^2 == -1, set tv1 = 0
@@ -204,7 +205,7 @@ function map_to_curve_elligator2_curve448(u: bigint) {
   return { xn, xd, yn: y, yd: Fp.ONE }; // 27. return (xn, xd, y, 1)
 }
 
-function map_to_curve_elligator2_edwards448(u: bigint) {
+function map_to_curve_elligator2_edwards448(u: BigInteger) {
   let { xn, xd, yn, yd } = map_to_curve_elligator2_curve448(u); // 1. (xn, xd, yn, yd) = map_to_curve_elligator2_curve448(u)
   let xn2 = Fp.sqr(xn); // 2.  xn2 = xn^2
   let xd2 = Fp.sqr(xd); // 3.  xd2 = xd^2
@@ -232,7 +233,7 @@ function map_to_curve_elligator2_edwards448(u: bigint) {
   tv1 = Fp.mul(tv1, xd2); // 25. tv1 = tv1 * xd2
   tv1 = Fp.mul(tv1, xd); // 26. tv1 = tv1 * xd
   tv1 = Fp.mul(tv1, yn2); // 27. tv1 = tv1 * yn2
-  tv1 = Fp.mul(tv1, BigInt(-2)); // 28. tv1 = -2 * tv1
+  tv1 = Fp.mul(tv1, BigInteger.new(-2)); // 28. tv1 = -2 * tv1
   let yEd = Fp.add(tv2, tv1); // 29. yEd = tv2 + tv1
   tv4 = Fp.mul(tv4, yd2); // 30. tv4 = tv4 * yd2
   yEd = Fp.add(yEd, tv4); // 31. yEd = yEd + tv4
@@ -250,7 +251,7 @@ function map_to_curve_elligator2_edwards448(u: bigint) {
 const htf = /* @__PURE__ */ (() =>
   createHasher(
     ed448.ExtendedPoint,
-    (scalars: bigint[]) => map_to_curve_elligator2_edwards448(scalars[0]),
+    (scalars: BigInteger[]) => map_to_curve_elligator2_edwards448(scalars[0]),
     {
       DST: 'edwards448_XOF:SHAKE256_ELL2_RO_',
       encodeDST: 'edwards448_XOF:SHAKE256_ELL2_NU_',
@@ -269,57 +270,57 @@ function assertDcfPoint(other: unknown) {
 }
 
 // 1-d
-const ONE_MINUS_D = BigInt('39082');
+const ONE_MINUS_D = BigInteger.new('39082');
 // 1-2d
-const ONE_MINUS_TWO_D = BigInt('78163');
+const ONE_MINUS_TWO_D = BigInteger.new('78163');
 // √(-d)
-const SQRT_MINUS_D = BigInt(
+const SQRT_MINUS_D = BigInteger.new(
   '98944233647732219769177004876929019128417576295529901074099889598043702116001257856802131563896515373927712232092845883226922417596214'
 );
 // 1 / √(-d)
-const INVSQRT_MINUS_D = BigInt(
+const INVSQRT_MINUS_D = BigInteger.new(
   '315019913931389607337177038330951043522456072897266928557328499619017160722351061360252776265186336876723201881398623946864393857820716'
 );
 // Calculates 1/√(number)
-const invertSqrt = (number: bigint) => uvRatio(_1n, number);
+const invertSqrt = (number: BigInteger) => uvRatio(_1n, number);
 
-const MAX_448B = BigInt(
+const MAX_448B = BigInteger.new(
   '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 );
 const bytes448ToNumberLE = (bytes: Uint8Array) =>
-  ed448.CURVE.Fp.create(bytesToNumberLE(bytes) & MAX_448B);
+  ed448.CURVE.Fp.create(bytesToNumberLE(bytes).bitwiseAnd(MAX_448B));
 
 type ExtendedPoint = ExtPointType;
 
 // Computes Elligator map for Decaf
 // https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448-07#name-element-derivation-2
-function calcElligatorDecafMap(r0: bigint): ExtendedPoint {
+function calcElligatorDecafMap(r0: BigInteger): ExtendedPoint {
   const { d } = ed448.CURVE;
   const P = ed448.CURVE.Fp.ORDER;
   const mod = ed448.CURVE.Fp.create;
 
-  const r = mod(-(r0 * r0)); // 1
-  const u0 = mod(d * (r - _1n)); // 2
-  const u1 = mod((u0 + _1n) * (u0 - r)); // 3
+  const r = mod((r0.mul(r0)).negate()); // 1
+  const u0 = mod(d.mul(r.dec())); // 2
+  const u1 = mod(u0.inc().imul(u0.sub(r))); // 3
 
-  const { isValid: was_square, value: v } = uvRatio(ONE_MINUS_TWO_D, mod((r + _1n) * u1)); // 4
+  const { isValid: was_square, value: v } = uvRatio(ONE_MINUS_TWO_D, mod(r.inc().imul( u1 ))); // 4
 
   let v_prime = v; // 5
-  if (!was_square) v_prime = mod(r0 * v);
+  if (!was_square) v_prime = mod(r0.mul(v));
 
   let sgn = _1n; // 6
-  if (!was_square) sgn = mod(-_1n);
+  if (!was_square) sgn = mod(_1n.negate());
 
-  const s = mod(v_prime * (r + _1n)); // 7
+  const s = mod(v_prime.mul(r.inc())); // 7
   let s_abs = s;
-  if (isNegativeLE(s, P)) s_abs = mod(-s);
+  if (isNegativeLE(s, P)) s_abs = mod(s.negate());
 
-  const s2 = s * s;
-  const W0 = mod(s_abs * _2n); // 8
-  const W1 = mod(s2 + _1n); // 9
-  const W2 = mod(s2 - _1n); // 10
-  const W3 = mod(v_prime * s * (r - _1n) * ONE_MINUS_TWO_D + sgn); // 11
-  return new ed448.ExtendedPoint(mod(W0 * W3), mod(W2 * W1), mod(W1 * W3), mod(W0 * W2));
+  const s2 = s.mul(s);
+  const W0 = mod(s_abs.mul(_2n)); // 8
+  const W1 = mod(s2.inc()); // 9
+  const W2 = mod(s2.dec()); // 10
+  const W3 = mod(v_prime.mul(s).imul( r.dec() ).imul( ONE_MINUS_TWO_D ).iadd( sgn )); // 11
+  return new ed448.ExtendedPoint(mod(W0.mul(W3)), mod(W2.mul(W1)), mod(W1.mul(W3)), mod(W0.mul(W2)));
 }
 
 /**
@@ -336,7 +337,7 @@ class DcfPoint implements Group<DcfPoint> {
   // Always use Decaf encoding/decoding instead.
   constructor(private readonly ep: ExtendedPoint) {}
 
-  static fromAffine(ap: AffinePoint<bigint>) {
+  static fromAffine(ap: AffinePoint<BigInteger>) {
     return new DcfPoint(ed448.ExtendedPoint.fromAffine(ap));
   }
 
@@ -373,19 +374,19 @@ class DcfPoint implements Group<DcfPoint> {
     // 2. Check that s is non-negative, or else abort
     if (!equalBytes(numberToBytesLE(s, 56), hex) || isNegativeLE(s, P)) throw new Error(emsg);
 
-    const s2 = mod(s * s); // 1
-    const u1 = mod(_1n + s2); // 2
-    const u1sq = mod(u1 * u1);
-    const u2 = mod(u1sq - _4n * d * s2); // 3
+    const s2 = mod(s.mul(s)); // 1
+    const u1 = mod(_1n.add(s2)); // 2
+    const u1sq = mod(u1.mul(u1));
+    const u2 = mod(u1sq.sub( _4n.mul(d).imul( s2 ) )); // 3
 
-    const { isValid, value: invsqrt } = invertSqrt(mod(u2 * u1sq)); // 4
+    const { isValid, value: invsqrt } = invertSqrt(mod(u2.mul(u1sq))); // 4
 
-    let u3 = mod((s + s) * invsqrt * u1 * SQRT_MINUS_D); // 5
-    if (isNegativeLE(u3, P)) u3 = mod(-u3);
+    let u3 = mod(s.add(s).imul(invsqrt).imul(u1).imul(SQRT_MINUS_D)); // 5
+    if (isNegativeLE(u3, P)) u3 = mod(u3.negate());
 
-    const x = mod(u3 * invsqrt * u2 * INVSQRT_MINUS_D); // 6
-    const y = mod((_1n - s2) * invsqrt * u1); // 7
-    const t = mod(x * y); // 8
+    const x = mod(u3.mul(invsqrt).imul(u2).imul(INVSQRT_MINUS_D)); // 6
+    const y = mod(_1n.sub(s2).imul(invsqrt).imul(u1)); // 7
+    const t = mod(x.mul(y)); // 8
 
     if (!isValid) throw new Error(emsg);
     return new DcfPoint(new ed448.ExtendedPoint(x, y, _1n, t));
@@ -400,17 +401,17 @@ class DcfPoint implements Group<DcfPoint> {
     const P = ed448.CURVE.Fp.ORDER;
     const mod = ed448.CURVE.Fp.create;
 
-    const u1 = mod(mod(x + t) * mod(x - t)); // 1
-    const x2 = mod(x * x);
-    const { value: invsqrt } = invertSqrt(mod(u1 * ONE_MINUS_D * x2)); // 2
+    const u1 = mod(mod(x.add(t)).imul( mod(x.sub(t)) )); // 1
+    const x2 = mod(x.mul(x));
+    const { value: invsqrt } = invertSqrt(mod(u1.mul(ONE_MINUS_D).imul(x2))); // 2
 
-    let ratio = mod(invsqrt * u1 * SQRT_MINUS_D); // 3
-    if (isNegativeLE(ratio, P)) ratio = mod(-ratio);
+    let ratio = mod(invsqrt.mul(u1).imul(SQRT_MINUS_D)); // 3
+    if (isNegativeLE(ratio, P)) ratio = mod(ratio.negate());
 
-    const u2 = mod(INVSQRT_MINUS_D * ratio * z - t); // 4
+    const u2 = mod(INVSQRT_MINUS_D.mul(ratio).imul(z).isub(t)); // 4
 
-    let s = mod(ONE_MINUS_D * invsqrt * x * u2); // 5
-    if (isNegativeLE(s, P)) s = mod(-s);
+    let s = mod(ONE_MINUS_D.mul(invsqrt).imul(x).imul(u2)); // 5
+    if (isNegativeLE(s, P)) s = mod(s.negate());
 
     return numberToBytesLE(s, 56);
   }
@@ -431,7 +432,7 @@ class DcfPoint implements Group<DcfPoint> {
     const { ex: X2, ey: Y2 } = other.ep;
     const mod = ed448.CURVE.Fp.create;
     // (x1 * y2 == y1 * x2)
-    return mod(X1 * Y2) === mod(Y1 * X2);
+    return mod(X1.mul(Y2)).equal( mod(Y1.mul(X2)) );
   }
 
   add(other: DcfPoint): DcfPoint {
@@ -444,11 +445,11 @@ class DcfPoint implements Group<DcfPoint> {
     return new DcfPoint(this.ep.subtract(other.ep));
   }
 
-  multiply(scalar: bigint): DcfPoint {
+  multiply(scalar: BigInteger): DcfPoint {
     return new DcfPoint(this.ep.multiply(scalar));
   }
 
-  multiplyUnsafe(scalar: bigint): DcfPoint {
+  multiplyUnsafe(scalar: BigInteger): DcfPoint {
     return new DcfPoint(this.ep.multiplyUnsafe(scalar));
   }
 

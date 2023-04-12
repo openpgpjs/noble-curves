@@ -1,4 +1,5 @@
 /*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */
+import { BigInteger } from '@openpgp/noble-hashes/biginteger';
 import type { Group, GroupConstructor, AffinePoint } from './curve.js';
 import { mod, IField } from './modular.js';
 import type { CHash } from './utils.js';
@@ -15,7 +16,7 @@ import { bytesToNumberBE, isBytes, concatBytes, utf8ToBytes, validateObject } fr
 type UnicodeOrBytes = string | Uint8Array;
 export type Opts = {
   DST: UnicodeOrBytes;
-  p: bigint;
+  p: BigInteger;
   m: number;
   k: number;
   expand: 'xmd' | 'xof';
@@ -131,10 +132,10 @@ export function expand_message_xof(
  * @param options `{DST: string, p: bigint, m: number, k: number, expand: 'xmd' | 'xof', hash: H}`, see above
  * @returns [u_0, ..., u_(count - 1)], a list of field elements.
  */
-export function hash_to_field(msg: Uint8Array, count: number, options: Opts): bigint[][] {
+export function hash_to_field(msg: Uint8Array, count: number, options: Opts): BigInteger[][] {
   validateObject(options, {
     DST: 'stringOrUint8Array',
-    p: 'bigint',
+    p: 'BigInteger',
     m: 'isSafeInteger',
     k: 'isSafeInteger',
     hash: 'hash',
@@ -143,7 +144,7 @@ export function hash_to_field(msg: Uint8Array, count: number, options: Opts): bi
   abytes(msg);
   isNum(count);
   const DST = validateDST(_DST);
-  const log2p = p.toString(2).length;
+  const log2p = p.bitLength();
   const L = Math.ceil((log2p + k) / 8); // section 5.1 of ietf draft link above
   const len_in_bytes = count * m * L;
   let prb; // pseudo_random_bytes
@@ -185,7 +186,7 @@ export function isogenyMap<T, F extends IField<T>>(field: F, map: [T[], T[], T[]
 
 export interface H2CPoint<T> extends Group<H2CPoint<T>> {
   add(rhs: H2CPoint<T>): H2CPoint<T>;
-  toAffine(iz?: bigint): AffinePoint<T>;
+  toAffine(iz?: BigInteger): AffinePoint<T>;
   clearCofactor(): H2CPoint<T>;
   assertValidity(): void;
 }
@@ -194,7 +195,7 @@ export interface H2CPointConstructor<T> extends GroupConstructor<H2CPoint<T>> {
   fromAffine(ap: AffinePoint<T>): H2CPoint<T>;
 }
 
-export type MapToCurve<T> = (scalar: bigint[]) => AffinePoint<T>;
+export type MapToCurve<T> = (scalar: BigInteger[]) => AffinePoint<T>;
 
 // Separated from initialization opts, so users won't accidentally change per-curve parameters
 // (changing DST is ok!)

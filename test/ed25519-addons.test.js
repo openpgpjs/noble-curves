@@ -1,5 +1,6 @@
-import { sha512 } from '@noble/hashes/sha512';
-import { bytesToHex as hex, hexToBytes } from '@noble/hashes/utils';
+import { BigInteger } from '@openpgp/noble-hashes/biginteger';
+import { sha512 } from '@openpgp/noble-hashes/sha512';
+import { bytesToHex as hex, hexToBytes } from '@openpgp/noble-hashes/utils';
 import { deepStrictEqual, throws } from 'assert';
 import { describe, should } from 'micro-should';
 import { bytesToNumberLE, numberToBytesLE } from '../esm/abstract/utils.js';
@@ -200,9 +201,10 @@ describe('RFC7748 X25519 ECDH', () => {
   });
 
   should('base point', () => {
+    const _1n = BigInteger.new(1);
     const { y } = ed25519ph.ExtendedPoint.BASE;
     const { Fp } = ed25519ph.CURVE;
-    const u = Fp.create((y + 1n) * Fp.inv(1n - y));
+    const u = Fp.create(y.inc().imul( Fp.inv(_1n.sub(y)) ));
     deepStrictEqual(numberToBytesLE(u, 32), x25519.GuBytes);
   });
 
@@ -341,9 +343,9 @@ describe('ristretto255', () => {
     }
   });
   should('have proper equality testing', () => {
-    const MAX_255B = BigInt('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+    const MAX_255B = BigInteger.new('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
     const bytes255ToNumberLE = (bytes) =>
-      ed25519ctx.CURVE.Fp.create(bytesToNumberLE(bytes) & MAX_255B);
+      ed25519ctx.CURVE.Fp.create(bytesToNumberLE(bytes).ibitwiseAnd(MAX_255B));
 
     const priv = new Uint8Array([
       198, 101, 65, 165, 93, 120, 37, 238, 16, 133, 10, 35, 253, 243, 161, 246, 229, 135, 12, 137,
