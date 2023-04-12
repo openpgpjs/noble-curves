@@ -1,6 +1,7 @@
 /*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */
-import { shake256 } from '@noble/hashes/sha3';
-import { concatBytes, randomBytes, utf8ToBytes, wrapConstructor } from '@noble/hashes/utils';
+import { BigInteger } from '@openpgp/noble-hashes/biginteger';
+import { shake256 } from '@openpgp/noble-hashes/sha3';
+import { concatBytes, randomBytes, utf8ToBytes, wrapConstructor } from '@openpgp/noble-hashes/utils';
 import { twistedEdwards } from './abstract/edwards.js';
 import { mod, pow2, Field } from './abstract/modular.js';
 import { montgomery } from './abstract/montgomery.js';
@@ -14,32 +15,32 @@ import { createHasher } from './abstract/hash-to-curve.js';
 
 const shake256_114 = wrapConstructor(() => shake256.create({ dkLen: 114 }));
 const shake256_64 = wrapConstructor(() => shake256.create({ dkLen: 64 }));
-const ed448P = BigInt(
+const ed448P = BigInteger.new(
   '726838724295606890549323807888004534353641360687318060281490199180612328166730772686396383698676545930088884461843637361053498018365439'
 );
 
 // powPminus3div4 calculates z = x^k mod p, where k = (p-3)/4.
 // Used for efficient square root calculation.
 // ((P-3)/4).toString(2) would produce bits [223x 1, 0, 222x 1]
-function ed448_pow_Pminus3div4(x: bigint): bigint {
+function ed448_pow_Pminus3div4(x: BigInteger): BigInteger {
   const P = ed448P;
   // prettier-ignore
-  const _1n = BigInt(1), _2n = BigInt(2), _3n = BigInt(3), _11n = BigInt(11);
+  const _1n = BigInteger.new(1), _2n = BigInteger.new(2), _3n = BigInteger.new(3), _11n = BigInteger.new(11);
   // prettier-ignore
-  const _22n = BigInt(22), _44n = BigInt(44), _88n = BigInt(88), _223n = BigInt(223);
-  const b2 = (x * x * x) % P;
-  const b3 = (b2 * b2 * x) % P;
-  const b6 = (pow2(b3, _3n, P) * b3) % P;
-  const b9 = (pow2(b6, _3n, P) * b3) % P;
-  const b11 = (pow2(b9, _2n, P) * b2) % P;
-  const b22 = (pow2(b11, _11n, P) * b11) % P;
-  const b44 = (pow2(b22, _22n, P) * b22) % P;
-  const b88 = (pow2(b44, _44n, P) * b44) % P;
-  const b176 = (pow2(b88, _88n, P) * b88) % P;
-  const b220 = (pow2(b176, _44n, P) * b44) % P;
-  const b222 = (pow2(b220, _2n, P) * b2) % P;
-  const b223 = (pow2(b222, _1n, P) * x) % P;
-  return (pow2(b223, _223n, P) * b222) % P;
+  const _22n = BigInteger.new(22), _44n = BigInteger.new(44), _88n = BigInteger.new(88), _223n = BigInteger.new(223);
+  const b2 = x.modExp(_3n, P);
+  const b3 = b2.mul(b2).imul(x).imod(P);
+  const b6 = pow2(b3, _3n, P).imul(b3).imod(P);
+  const b9 = pow2(b6, _3n, P).imul(b3).imod(P);
+  const b11 = pow2(b9, _2n, P).imul(b2).imod(P);
+  const b22 = pow2(b11, _11n, P).imul(b11).imod(P);
+  const b44 = pow2(b22, _22n, P).imul(b22).imod(P);
+  const b88 = pow2(b44, _44n, P).imul(b44).imod(P);
+  const b176 = pow2(b88, _88n, P).imul(b88).imod(P);
+  const b220 = pow2(b176, _44n, P).imul(b44).imod(P);
+  const b222 = pow2(b220, _2n, P).imul(b2).imod(P);
+  const b223 = pow2(b222, _1n, P).imul(x).imod(P);
+  return pow2(b223, _223n, P).imul(b222).imod(P);
 }
 
 function adjustScalarBytes(bytes: Uint8Array): Uint8Array {
@@ -54,30 +55,32 @@ function adjustScalarBytes(bytes: Uint8Array): Uint8Array {
 }
 
 const Fp = Field(ed448P, 456, true);
-const _4n = BigInt(4);
+const _4n = BigInteger.new(4);
+const _3n = BigInteger.new(3);
+const _2n = BigInteger.new(2);
 
 const ED448_DEF = {
   // Param: a
-  a: BigInt(1),
+  a: BigInteger.new(1),
   // -39081. Negative number is P - number
-  d: BigInt(
+  d: BigInteger.new(
     '726838724295606890549323807888004534353641360687318060281490199180612328166730772686396383698676545930088884461843637361053498018326358'
   ),
   // Finite field 𝔽p over which we'll do calculations; 2n**448n - 2n**224n - 1n
   Fp,
   // Subgroup order: how many points curve has;
   // 2n**446n - 13818066809895115352007386748515426880336692474882178609894547503885n
-  n: BigInt(
+  n: BigInteger.new(
     '181709681073901722637330951972001133588410340171829515070372549795146003961539585716195755291692375963310293709091662304773755859649779'
   ),
   nBitLength: 456,
   // Cofactor
-  h: BigInt(4),
+  h: BigInteger.new(4),
   // Base point (x, y) aka generator point
-  Gx: BigInt(
+  Gx: BigInteger.new(
     '224580040295924300187604334099896036246789641632564134246125461686950415467406032909029192869357953282578032075146446173674602635247710'
   ),
-  Gy: BigInt(
+  Gy: BigInteger.new(
     '298819210078481492676017930443930673437544040154080242095928241372331506189835876003536878655418784733982303233503462500531545062832660'
   ),
   // SHAKE256(dom4(phflag,context)||x, 114)
@@ -97,7 +100,7 @@ const ED448_DEF = {
 
   // Constant-time ratio of u to v. Allows to combine inversion and square root u/√v.
   // Uses algo from RFC8032 5.1.3.
-  uvRatio: (u: bigint, v: bigint): { isValid: boolean; value: bigint } => {
+  uvRatio: (u: BigInteger, v: BigInteger): { isValid: boolean; value: BigInteger } => {
     const P = ed448P;
     // https://datatracker.ietf.org/doc/html/rfc8032#section-5.2.3
     // To compute the square root of (u/v), the first step is to compute the
@@ -105,16 +108,16 @@ const ED448_DEF = {
     // following trick, to use a single modular powering for both the
     // inversion of v and the square root:
     // x = (u/v)^((p+1)/4)   = u³v(u⁵v³)^((p-3)/4)   (mod p)
-    const u2v = mod(u * u * v, P); // u²v
-    const u3v = mod(u2v * u, P); // u³v
-    const u5v3 = mod(u3v * u2v * v, P); // u⁵v³
+    const u2v = mod(u.mul(u).mul(v), P); // u²v
+    const u3v = mod(u2v.mul(u), P); // u³v
+    const u5v3 = mod(u3v.mul(u2v).mul(v), P); // u⁵v³
     const root = ed448_pow_Pminus3div4(u5v3);
-    const x = mod(u3v * root, P);
+    const x = mod(u3v.mul(root), P);
     // Verify that root is exists
-    const x2 = mod(x * x, P); // x²
+    const x2 = mod(x.mul(x), P); // x²
     // If vx² = u, the recovered x-coordinate is x.  Otherwise, no
     // square root exists, and the decoding fails.
-    return { isValid: mod(x2 * v, P) === u, value: x };
+    return { isValid: mod(x2.mul(v), P).equal(u), value: x };
   },
 } as const;
 
@@ -124,20 +127,20 @@ export const ed448ph = twistedEdwards({ ...ED448_DEF, prehash: shake256_64 });
 
 export const x448 = /* @__PURE__ */ (() =>
   montgomery({
-    a: BigInt(156326),
+    a: BigInteger.new(156326),
     montgomeryBits: 448,
     nByteLength: 57,
     P: ed448P,
-    Gu: BigInt(5),
-    powPminus2: (x: bigint): bigint => {
+    Gu: BigInteger.new(5),
+    powPminus2: (x: BigInteger): BigInteger => {
       const P = ed448P;
       const Pminus3div4 = ed448_pow_Pminus3div4(x);
-      const Pminus3 = pow2(Pminus3div4, BigInt(2), P);
-      return mod(Pminus3 * x, P); // Pminus3 * x = Pminus2
+      const Pminus3 = pow2(Pminus3div4, BigInteger.new(2), P);
+      return mod(Pminus3.mul(x), P); // Pminus3 * x = Pminus2
     },
     adjustScalarBytes,
     randomBytes,
-  }))();
+}))();
 
 /**
  * Converts edwards448 public key to x448 public key. Uses formula:
@@ -149,15 +152,14 @@ export const x448 = /* @__PURE__ */ (() =>
  */
 export function edwardsToMontgomeryPub(edwardsPub: string | Uint8Array): Uint8Array {
   const { y } = ed448.ExtendedPoint.fromHex(edwardsPub);
-  const _1n = BigInt(1);
-  return Fp.toBytes(Fp.create((y - _1n) * Fp.inv(y + _1n)));
+  return Fp.toBytes(Fp.create( y.dec().imul( Fp.inv(y.inc()) )));
 }
 export const edwardsToMontgomery = edwardsToMontgomeryPub; // deprecated
 
 // Hash To Curve Elligator2 Map
-const ELL2_C1 = (Fp.ORDER - BigInt(3)) / BigInt(4); // 1. c1 = (q - 3) / 4         # Integer arithmetic
-const ELL2_J = BigInt(156326);
-function map_to_curve_elligator2_curve448(u: bigint) {
+const ELL2_C1 = Fp.ORDER.sub(_3n).irightShift(_2n); // 1. c1 = (q - 3) / 4         # Integer arithmetic
+const ELL2_J = BigInteger.new(156326);
+function map_to_curve_elligator2_curve448(u: BigInteger) {
   let tv1 = Fp.sqr(u); // 1.  tv1 = u^2
   let e1 = Fp.eql(tv1, Fp.ONE); // 2.   e1 = tv1 == 1
   tv1 = Fp.cmov(tv1, Fp.ZERO, e1); // 3.  tv1 = CMOV(tv1, 0, e1)  # If Z * u^2 == -1, set tv1 = 0
@@ -186,7 +188,7 @@ function map_to_curve_elligator2_curve448(u: bigint) {
   y = Fp.cmov(y, Fp.neg(y), e2 !== e3); // 26.   y = CMOV(y, -y, e2 XOR e3)
   return { xn, xd, yn: y, yd: Fp.ONE }; // 27. return (xn, xd, y, 1)
 }
-function map_to_curve_elligator2_edwards448(u: bigint) {
+function map_to_curve_elligator2_edwards448(u: BigInteger) {
   let { xn, xd, yn, yd } = map_to_curve_elligator2_curve448(u); // 1. (xn, xd, yn, yd) = map_to_curve_elligator2_curve448(u)
   let xn2 = Fp.sqr(xn); // 2.  xn2 = xn^2
   let xd2 = Fp.sqr(xd); // 3.  xd2 = xd^2
@@ -214,7 +216,7 @@ function map_to_curve_elligator2_edwards448(u: bigint) {
   tv1 = Fp.mul(tv1, xd2); // 25. tv1 = tv1 * xd2
   tv1 = Fp.mul(tv1, xd); // 26. tv1 = tv1 * xd
   tv1 = Fp.mul(tv1, yn2); // 27. tv1 = tv1 * yn2
-  tv1 = Fp.mul(tv1, BigInt(-2)); // 28. tv1 = -2 * tv1
+  tv1 = Fp.mul(tv1, BigInteger.new(-2)); // 28. tv1 = -2 * tv1
   let yEd = Fp.add(tv2, tv1); // 29. yEd = tv2 + tv1
   tv4 = Fp.mul(tv4, yd2); // 30. tv4 = tv4 * yd2
   yEd = Fp.add(yEd, tv4); // 31. yEd = yEd + tv4
@@ -232,7 +234,7 @@ function map_to_curve_elligator2_edwards448(u: bigint) {
 const htf = /* @__PURE__ */ (() =>
   createHasher(
     ed448.ExtendedPoint,
-    (scalars: bigint[]) => map_to_curve_elligator2_edwards448(scalars[0]),
+    (scalars: BigInteger[]) => map_to_curve_elligator2_edwards448(scalars[0]),
     {
       DST: 'edwards448_XOF:SHAKE256_ELL2_RO_',
       encodeDST: 'edwards448_XOF:SHAKE256_ELL2_NU_',

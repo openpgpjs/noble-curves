@@ -1,9 +1,10 @@
 /*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */
 // Abelian group utilities
+import { BigInteger } from '@openpgp/noble-hashes/biginteger';
 import { IField, validateField, nLength } from './modular.js';
 import { validateObject } from './utils.js';
-const _0n = BigInt(0);
-const _1n = BigInt(1);
+const _0n = Object.freeze(BigInteger.new(0));
+const _1n = Object.freeze(BigInteger.new(1));
 
 export type AffinePoint<T> = {
   x: T;
@@ -16,7 +17,7 @@ export interface Group<T extends Group<T>> {
   add(other: T): T;
   subtract(other: T): T;
   equals(other: T): boolean;
-  multiply(scalar: bigint): T;
+  multiply(scalar: BigInteger): T;
 }
 
 export type GroupConstructor<T> = {
@@ -49,13 +50,14 @@ export function wNAF<T extends Group<T>>(c: GroupConstructor<T>, bits: number) {
   return {
     constTimeNegate,
     // non-const time multiplication ladder
-    unsafeLadder(elm: T, n: bigint) {
+    unsafeLadder(elm: T, exp: BigInteger) {
+      const n = exp.clone();
       let p = c.ZERO;
       let d: T = elm;
-      while (n > _0n) {
-        if (n & _1n) p = p.add(d);
+      while (n.gt(_0n)) {
+        if (!n.isEven()) p = p.add(d);
         d = d.double();
-        n >>= _1n;
+        n.irightShift(_1n);
       }
       return p;
     },
@@ -95,7 +97,8 @@ export function wNAF<T extends Group<T>>(c: GroupConstructor<T>, bits: number) {
      * @param n scalar (we don't check here, but should be less than curve order)
      * @returns real and fake (for const-time) points
      */
-    wNAF(W: number, precomputes: T[], n: bigint): { p: T; f: T } {
+    wNAF(W: number, precomputes: T[], scalar: BigInteger): { p: T; f: T } {
+      const n = scalar.clone();
       // TODO: maybe check that scalar is less than group order? wNAF behavious is undefined otherwise
       // But need to carefully remove other checks before wNAF. ORDER == bits here
       const { windows, windowSize } = opts(W);
@@ -103,23 +106,23 @@ export function wNAF<T extends Group<T>>(c: GroupConstructor<T>, bits: number) {
       let p = c.ZERO;
       let f = c.BASE;
 
-      const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
+      const mask = BigInteger.new(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
       const maxNumber = 2 ** W;
-      const shiftBy = BigInt(W);
+      const shiftBy = BigInteger.new(W);
 
       for (let window = 0; window < windows; window++) {
         const offset = window * windowSize;
         // Extract W bits.
-        let wbits = Number(n & mask);
+        let wbits = n.bitwiseAnd(mask).toNumber();
 
         // Shift number by W bits.
-        n >>= shiftBy;
+        n.irightShift(shiftBy);
 
         // If the bits are bigger than max size, we'll split those.
         // +224 => 256 - 32
         if (wbits > windowSize) {
           wbits -= maxNumber;
-          n += _1n;
+          n.iinc();
         }
 
         // This code was first written with assumption that 'f' and 'p' will never be infinity point:
@@ -149,7 +152,7 @@ export function wNAF<T extends Group<T>>(c: GroupConstructor<T>, bits: number) {
       return { p, f };
     },
 
-    wNAFCached(P: T, precomputesMap: Map<T, T[]>, n: bigint, transform: Mapper<T>): { p: T; f: T } {
+    wNAFCached(P: T, precomputesMap: Map<T, T[]>, n: BigInteger, transform: Mapper<T>): { p: T; f: T } {
       // @ts-ignore
       const W: number = P._WINDOW_SIZE || 1;
       // Calculate precomputes on a first run, reuse them after
@@ -169,11 +172,11 @@ export function wNAF<T extends Group<T>>(c: GroupConstructor<T>, bits: number) {
 // Though generator can be different (Fp2 / Fp6 for BLS).
 export type BasicCurve<T> = {
   Fp: IField<T>; // Field over which we'll do calculations (Fp)
-  n: bigint; // Curve order, total count of valid points in the field
+  n: BigInteger; // Curve order, total count of valid points in the field
   nBitLength?: number; // bit length of curve order
   nByteLength?: number; // byte length of curve order
-  h: bigint; // cofactor. we can assign default=1, but users will just ignore it w/o validation
-  hEff?: bigint; // Number to multiply to clear cofactor
+  h: BigInteger; // cofactor. we can assign default=1, but users will just ignore it w/o validation
+  hEff?: BigInteger; // Number to multiply to clear cofactor
   Gx: T; // base point X coordinate
   Gy: T; // base point Y coordinate
   allowInfinityPoint?: boolean; // bls12-381 requires it. ZERO point is valid, but invalid pubkey
@@ -184,8 +187,8 @@ export function validateBasic<FP, T>(curve: BasicCurve<FP> & T) {
   validateObject(
     curve,
     {
-      n: 'bigint',
-      h: 'bigint',
+      n: 'BigInteger',
+      h: 'BigInteger',
       Gx: 'field',
       Gy: 'field',
     },

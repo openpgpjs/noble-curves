@@ -1,14 +1,14 @@
+// TODOOOOOO use noble-hashes utils instead
+
 /*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */
-// 100 lines of code in the file are duplicated from noble-hashes (utils).
-// This is OK: `abstract` directory does not use noble-hashes.
-// User may opt-in into using different hashing library. This way, noble-hashes
-// won't be included into their bundle.
-const _0n = BigInt(0);
-const _1n = BigInt(1);
-const _2n = BigInt(2);
+
+import { BigInteger } from '@openpgp/noble-hashes/biginteger';
+
+const _2n = Object.freeze(BigInteger.new(2));
 const u8a = (a: any): a is Uint8Array => a instanceof Uint8Array;
+
 export type Hex = Uint8Array | string; // hex strings are accepted for simplicity
-export type PrivKey = Hex | bigint; // bigints are accepted to ease learning curve
+export type PrivKey = Hex | BigInteger; // bigints are accepted to ease learning curve
 export type CHash = {
   (message: Uint8Array | string): Uint8Array;
   blockLen: number;
@@ -31,15 +31,15 @@ export function bytesToHex(bytes: Uint8Array): string {
   return hex;
 }
 
-export function numberToHexUnpadded(num: number | bigint): string {
-  const hex = num.toString(16);
+export function numberToHexUnpadded(num: number | BigInteger): string {
+  const hex = num instanceof BigInteger ? bytesToHex(num.toUint8Array()) : num.toString(16);
   return hex.length & 1 ? `0${hex}` : hex;
 }
 
-export function hexToNumber(hex: string): bigint {
+export function hexToNumber(hex: string): BigInteger {
   if (typeof hex !== 'string') throw new Error('hex string expected, got ' + typeof hex);
   // Big Endian
-  return BigInt(hex === '' ? '0' : `0x${hex}`);
+  return BigInteger.new(hex === '' ? '0' : `0x${hex}`);
 }
 
 /**
@@ -61,22 +61,22 @@ export function hexToBytes(hex: string): Uint8Array {
 }
 
 // BE: Big Endian, LE: Little Endian
-export function bytesToNumberBE(bytes: Uint8Array): bigint {
-  return hexToNumber(bytesToHex(bytes));
+export function bytesToNumberBE(bytes: Uint8Array): BigInteger {
+  return BigInteger.new(bytes);
 }
-export function bytesToNumberLE(bytes: Uint8Array): bigint {
+export function bytesToNumberLE(bytes: Uint8Array): BigInteger {
   if (!u8a(bytes)) throw new Error('Uint8Array expected');
-  return hexToNumber(bytesToHex(Uint8Array.from(bytes).reverse()));
+  return BigInteger.new(bytes.slice().reverse()); // reverse() is in place
 }
 
-export function numberToBytesBE(n: number | bigint, len: number): Uint8Array {
-  return hexToBytes(n.toString(16).padStart(len * 2, '0'));
+export function numberToBytesBE(n: BigInteger, len: number): Uint8Array {
+  return n.toUint8Array('be', len);
 }
-export function numberToBytesLE(n: number | bigint, len: number): Uint8Array {
-  return numberToBytesBE(n, len).reverse();
+export function numberToBytesLE(n: BigInteger, len: number): Uint8Array {
+  return n.toUint8Array('le', len);
 }
-// Unpadded, rarely used
-export function numberToVarBytesBE(n: number | bigint): Uint8Array {
+// Returns variable number bytes (minimal bigint encoding?)
+export function numberToVarBytesBE(n: number | BigInteger): Uint8Array {
   return hexToBytes(numberToHexUnpadded(n));
 }
 
@@ -100,7 +100,7 @@ export function ensureBytes(title: string, hex: Hex, expectedLength?: number): U
   } else if (u8a(hex)) {
     // Uint8Array.from() instead of hash.slice() because node.js Buffer
     // is instance of Uint8Array, and its slice() creates **mutable** copy
-    res = Uint8Array.from(hex);
+    res = new Uint8Array(hex);
   } else {
     throw new Error(`${title} must be hex string or Uint8Array`);
   }
@@ -149,10 +149,8 @@ export function utf8ToBytes(str: string): Uint8Array {
  * Calculates amount of bits in a bigint.
  * Same as `n.toString(2).length`
  */
-export function bitLen(n: bigint) {
-  let len;
-  for (len = 0; n > _0n; n >>= _1n, len += 1);
-  return len;
+export function bitLen(n: BigInteger) {
+  return n.bitLength();
 }
 
 /**
@@ -160,22 +158,21 @@ export function bitLen(n: bigint) {
  * NOTE: first bit position is 0 (same as arrays)
  * Same as `!!+Array.from(n.toString(2)).reverse()[pos]`
  */
-export function bitGet(n: bigint, pos: number) {
-  return (n >> BigInt(pos)) & _1n;
-}
+export const bitGet = (n: BigInteger, pos: number) => n.getBit(pos);
 
 /**
  * Sets single bit at position.
  */
-export const bitSet = (n: bigint, pos: number, value: boolean) => {
-  return n | ((value ? _1n : _0n) << BigInt(pos));
+export const bitSet = (n: BigInteger, pos: number, value: boolean) => {
+  throw new Error('unsupported bitSet')
+  // return n | ((value ? _1n : _0n) << BigInt(pos));
 };
 
 /**
  * Calculate mask for N bits. Not using ** operator with bigints because of old engines.
  * Same as BigInt(`0b${Array(i).fill('1').join('')}`)
  */
-export const bitMask = (n: number) => (_2n << BigInt(n - 1)) - _1n;
+export const bitMask = (n: number) => (_2n.leftShift(BigInteger.new(n - 1))).idec();
 
 // DRBG
 
@@ -242,7 +239,7 @@ export function createHmacDrbg<T>(
 // Validating curves and fields
 
 const validatorFns = {
-  bigint: (val: any) => typeof val === 'bigint',
+  BigInteger: (val: any) => val instanceof BigInteger,
   function: (val: any) => typeof val === 'function',
   boolean: (val: any) => typeof val === 'boolean',
   string: (val: any) => typeof val === 'string',
@@ -262,9 +259,9 @@ export function validateObject<T extends Record<string, any>>(
 ) {
   const checkField = (fieldName: keyof T, type: Validator, isOptional: boolean) => {
     const checkVal = validatorFns[type];
-    if (typeof checkVal !== 'function')
+    if (typeof checkVal !== 'function') {
       throw new Error(`Invalid validator "${type}", expected function`);
-
+    }
     const val = object[fieldName as keyof typeof object];
     if (isOptional && val === undefined) return;
     if (!checkVal(val, object)) {
