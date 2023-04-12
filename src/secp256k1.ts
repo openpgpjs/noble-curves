@@ -1,6 +1,7 @@
 /*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */
-import { sha256 } from '@noble/hashes/sha256';
-import { randomBytes } from '@noble/hashes/utils';
+import { BigInteger } from '@openpgp/noble-hashes/biginteger';
+import { sha256 } from '@openpgp/noble-hashes/sha256';
+import { randomBytes } from '@openpgp/noble-hashes/utils';
 import { Field, mod, pow2 } from './abstract/modular.js';
 import { ProjPointType as PointType, mapToCurveSimpleSWU } from './abstract/weierstrass.js';
 import type { Hex, PrivKey } from './abstract/utils.js';
@@ -8,35 +9,36 @@ import { bytesToNumberBE, concatBytes, ensureBytes, numberToBytesBE } from './ab
 import { createHasher, isogenyMap } from './abstract/hash-to-curve.js';
 import { createCurve } from './_shortw_utils.js';
 
-const secp256k1P = BigInt('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f');
-const secp256k1N = BigInt('0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141');
-const _1n = BigInt(1);
-const _2n = BigInt(2);
-const divNearest = (a: bigint, b: bigint) => (a + b / _2n) / b;
+const secp256k1P =  Object.freeze(BigInteger.new('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f'));
+const secp256k1N =  Object.freeze(BigInteger.new('0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141'));
+const _0n = Object.freeze(BigInteger.new(0));
+const _1n = Object.freeze(BigInteger.new(1));
+const _2n =  Object.freeze(BigInteger.new(2));
+const divNearest = (a: BigInteger, b: BigInteger) => a.add( b.rightShift(_1n) ).idiv(b);
 
 /**
  * √n = n^((p+1)/4) for fields p = 3 mod 4. We unwrap the loop and multiply bit-by-bit.
  * (P+1n/4n).toString(2) would produce bits [223x 1, 0, 22x 1, 4x 0, 11, 00]
  */
-function sqrtMod(y: bigint): bigint {
+function sqrtMod(y: BigInteger): BigInteger {
   const P = secp256k1P;
   // prettier-ignore
-  const _3n = BigInt(3), _6n = BigInt(6), _11n = BigInt(11), _22n = BigInt(22);
+  const _3n = BigInteger.new(3), _6n = BigInteger.new(6), _11n = BigInteger.new(11), _22n = BigInteger.new(22);
   // prettier-ignore
-  const _23n = BigInt(23), _44n = BigInt(44), _88n = BigInt(88);
-  const b2 = (y * y * y) % P; // x^3, 11
-  const b3 = (b2 * b2 * y) % P; // x^7
-  const b6 = (pow2(b3, _3n, P) * b3) % P;
-  const b9 = (pow2(b6, _3n, P) * b3) % P;
-  const b11 = (pow2(b9, _2n, P) * b2) % P;
-  const b22 = (pow2(b11, _11n, P) * b11) % P;
-  const b44 = (pow2(b22, _22n, P) * b22) % P;
-  const b88 = (pow2(b44, _44n, P) * b44) % P;
-  const b176 = (pow2(b88, _88n, P) * b88) % P;
-  const b220 = (pow2(b176, _44n, P) * b44) % P;
-  const b223 = (pow2(b220, _3n, P) * b3) % P;
-  const t1 = (pow2(b223, _23n, P) * b22) % P;
-  const t2 = (pow2(t1, _6n, P) * b2) % P;
+  const _23n = BigInteger.new(23), _44n = BigInteger.new(44), _88n = BigInteger.new(88);
+  const b2 = y.mul(y).imul(y).imod(P); // x^3, 11
+  const b3 = b2.mul(b2).imul(y).imod(P); // x^7
+  const b6 = pow2(b3, _3n, P).imul(b3).imod(P);
+  const b9 = pow2(b6, _3n, P).imul(b3).imod(P);
+  const b11 = pow2(b9, _2n, P).imul(b2).imod(P);
+  const b22 = pow2(b11, _11n, P).imul(b11).imod(P);
+  const b44 = pow2(b22, _22n, P).imul(b22).imod(P);
+  const b88 = pow2(b44, _44n, P).imul(b44).imod(P);
+  const b176 = pow2(b88, _88n, P).imul(b88).imod(P);
+  const b220 = pow2(b176, _44n, P).imul(b44).imod(P);
+  const b223 = pow2(b220, _3n, P).imul(b3).imod(P);
+  const t1 = pow2(b223, _23n, P).imul(b22).imod(P);
+  const t2 = pow2(t1, _6n, P).imul(b2).imod(P);
   const root = pow2(t2, _2n, P);
   if (!Fp.eql(Fp.sqr(root), y)) throw new Error('Cannot find square root');
   return root;
@@ -46,14 +48,14 @@ const Fp = Field(secp256k1P, undefined, undefined, { sqrt: sqrtMod });
 
 export const secp256k1 = createCurve(
   {
-    a: BigInt(0), // equation params: a, b
-    b: BigInt(7), // Seem to be rigid: bitcointalk.org/index.php?topic=289795.msg3183975#msg3183975
+    a: BigInteger.new(0), // equation params: a, b
+    b: BigInteger.new(7), // Seem to be rigid: bitcointalk.org/index.php?topic=289795.msg3183975#msg3183975
     Fp, // Field's prime: 2n**256n - 2n**32n - 2n**9n - 2n**8n - 2n**7n - 2n**6n - 2n**4n - 1n
     n: secp256k1N, // Curve order, total count of valid points in the field
     // Base point (x, y) aka generator point
-    Gx: BigInt('55066263022277343669578718895168534326250603453777594175500187360389116729240'),
-    Gy: BigInt('32670510020758816978083085130507043184471273380659243275938904335757337482424'),
-    h: BigInt(1), // Cofactor
+    Gx: BigInteger.new('55066263022277343669578718895168534326250603453777594175500187360389116729240'),
+    Gy: BigInteger.new('32670510020758816978083085130507043184471273380659243275938904335757337482424'),
+    h: BigInteger.new(1), // Cofactor
     lowS: true, // Allow only low-S signatures by default in sign() and verify()
     /**
      * secp256k1 belongs to Koblitz curves: it has efficiently computable endomorphism.
@@ -62,24 +64,24 @@ export const secp256k1 = createCurve(
      * Explanation: https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
      */
     endo: {
-      beta: BigInt('0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee'),
-      splitScalar: (k: bigint) => {
+      beta: BigInteger.new('0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee'),
+      splitScalar: (k: BigInteger) => {
         const n = secp256k1N;
-        const a1 = BigInt('0x3086d221a7d46bcde86c90e49284eb15');
-        const b1 = -_1n * BigInt('0xe4437ed6010e88286f547fa90abfe4c3');
-        const a2 = BigInt('0x114ca50f7a8e2f3f657c1108d9d44cfd8');
+        const a1 = BigInteger.new('0x3086d221a7d46bcde86c90e49284eb15');
+        const b1 = _1n.negate().imul( BigInteger.new('0xe4437ed6010e88286f547fa90abfe4c3') );
+        const a2 = BigInteger.new('0x114ca50f7a8e2f3f657c1108d9d44cfd8');
         const b2 = a1;
-        const POW_2_128 = BigInt('0x100000000000000000000000000000000'); // (2n**128n).toString(16)
+        const POW_2_128 = BigInteger.new('0x100000000000000000000000000000000'); // (2n**128n).toString(16)
 
-        const c1 = divNearest(b2 * k, n);
-        const c2 = divNearest(-b1 * k, n);
-        let k1 = mod(k - c1 * a1 - c2 * a2, n);
-        let k2 = mod(-c1 * b1 - c2 * b2, n);
-        const k1neg = k1 > POW_2_128;
-        const k2neg = k2 > POW_2_128;
-        if (k1neg) k1 = n - k1;
-        if (k2neg) k2 = n - k2;
-        if (k1 > POW_2_128 || k2 > POW_2_128) {
+        const c1 = divNearest(b2.mul(k), n);
+        const c2 = divNearest(b1.negate().imul( k ), n);
+        let k1 = mod(k.sub( c1.mul(a1) ).sub( c2.mul(a2) ), n);
+        let k2 = mod(c1.negate().mul(b1).isub( c2.mul(b2) ), n);
+        const k1neg = k1.gt(POW_2_128);
+        const k2neg = k2.gt(POW_2_128);
+        if (k1neg) k1 = n.sub(k1);
+        if (k2neg) k2 = n.sub(k2);
+        if (k1.gt(POW_2_128) || k2.gt(POW_2_128)) {
           throw new Error('splitScalar: Endomorphism failed, k=' + k);
         }
         return { k1neg, k1, k2neg, k2 };
@@ -91,15 +93,14 @@ export const secp256k1 = createCurve(
 
 // Schnorr signatures are superior to ECDSA from above. Below is Schnorr-specific BIP0340 code.
 // https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki
-const _0n = BigInt(0);
-const fe = (x: bigint) => typeof x === 'bigint' && _0n < x && x < secp256k1P;
-const ge = (x: bigint) => typeof x === 'bigint' && _0n < x && x < secp256k1N;
+const fe = (x: BigInteger) => x instanceof BigInteger && _0n.lt(x) && x.lt(secp256k1P);
+const ge = (x: BigInteger) => x instanceof BigInteger && _0n.lt(x) && x.lt(secp256k1N);
 /** An object mapping tags to their tagged hash prefix of [SHA256(tag) | SHA256(tag)] */
 const TAGGED_HASH_PREFIXES: { [tag: string]: Uint8Array } = {};
 function taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array {
   let tagP = TAGGED_HASH_PREFIXES[tag];
   if (tagP === undefined) {
-    const tagH = sha256(Uint8Array.from(tag, (c) => c.charCodeAt(0)));
+    const tagH = sha256(Uint8Array.from(tag, (c) => c.charCodeAt(0))); // TODO replace Uint8Array.from
     tagP = concatBytes(tagH, tagH);
     TAGGED_HASH_PREFIXES[tag] = tagP;
   }
@@ -107,39 +108,39 @@ function taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array {
 }
 
 // ECDSA compact points are 33-byte. Schnorr is 32: we strip first byte 0x02 or 0x03
-const pointToBytes = (point: PointType<bigint>) => point.toRawBytes(true).slice(1);
-const numTo32b = (n: bigint) => numberToBytesBE(n, 32);
-const modP = (x: bigint) => mod(x, secp256k1P);
-const modN = (x: bigint) => mod(x, secp256k1N);
+const pointToBytes = (point: PointType<BigInteger>) => point.toRawBytes(true).slice(1);
+const numTo32b = (n: BigInteger) => numberToBytesBE(n, 32);
+const modP = (x: BigInteger) => mod(x, secp256k1P);
+const modN = (x: BigInteger) => mod(x, secp256k1N);
 const Point = secp256k1.ProjectivePoint;
-const GmulAdd = (Q: PointType<bigint>, a: bigint, b: bigint) =>
+const GmulAdd = (Q: PointType<BigInteger>, a: BigInteger, b: BigInteger) =>
   Point.BASE.multiplyAndAddUnsafe(Q, a, b);
 
 // Calculate point, scalar and bytes
 function schnorrGetExtPubKey(priv: PrivKey) {
   let d_ = secp256k1.utils.normPrivateKeyToScalar(priv); // same method executed in fromPrivateKey
   let p = Point.fromPrivateKey(d_); // P = d'⋅G; 0 < d' < n check is done inside
-  const scalar = p.hasEvenY() ? d_ : modN(-d_);
+  const scalar = p.hasEvenY() ? d_ : modN(d_.negate());
   return { scalar: scalar, bytes: pointToBytes(p) };
 }
 /**
  * lift_x from BIP340. Convert 32-byte x coordinate to elliptic curve point.
  * @returns valid point checked for being on-curve
  */
-function lift_x(x: bigint): PointType<bigint> {
+function lift_x(x: BigInteger): PointType<BigInteger> {
   if (!fe(x)) throw new Error('bad x: need 0 < x < p'); // Fail if x ≥ p.
-  const xx = modP(x * x);
-  const c = modP(xx * x + BigInt(7)); // Let c = x³ + 7 mod p.
+  const xx = modP(x.mul(x));
+  const c = modP(xx.mul(x).iadd( BigInteger.new(7) )); // Let c = x³ + 7 mod p.
   let y = sqrtMod(c); // Let y = c^(p+1)/4 mod p.
-  if (y % _2n !== _0n) y = modP(-y); // Return the unique point P such that x(P) = x and
+  if (!y.isEven()) y = modP(y.negate()); // Return the unique point P such that x(P) = x and
   const p = new Point(x, y, _1n); // y(P) = y if y mod 2 = 0 or y(P) = p-y otherwise.
   p.assertValidity();
   return p;
 }
 /**
- * Create tagged hash, convert it to bigint, reduce modulo-n.
+ * Create tagged hash, convert it to BigInteger, reduce modulo-n.
  */
-function challenge(...args: Uint8Array[]): bigint {
+function challenge(...args: Uint8Array[]): BigInteger {
   return modN(bytesToNumberBE(taggedHash('BIP0340/challenge', ...args)));
 }
 
@@ -162,15 +163,15 @@ function schnorrSign(
   const m = ensureBytes('message', message);
   const { bytes: px, scalar: d } = schnorrGetExtPubKey(privateKey); // checks for isWithinCurveOrder
   const a = ensureBytes('auxRand', auxRand, 32); // Auxiliary random data a: a 32-byte array
-  const t = numTo32b(d ^ bytesToNumberBE(taggedHash('BIP0340/aux', a))); // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
+  const t = numTo32b(d.xor( bytesToNumberBE(taggedHash('BIP0340/aux', a)) )); // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
   const rand = taggedHash('BIP0340/nonce', t, px, m); // Let rand = hash/nonce(t || bytes(P) || m)
   const k_ = modN(bytesToNumberBE(rand)); // Let k' = int(rand) mod n
-  if (k_ === _0n) throw new Error('sign failed: k is zero'); // Fail if k' = 0.
+  if (k_.isZero()) throw new Error('sign failed: k is zero'); // Fail if k' = 0.
   const { bytes: rx, scalar: k } = schnorrGetExtPubKey(k_); // Let R = k'⋅G.
   const e = challenge(rx, px, m); // Let e = int(hash/challenge(bytes(R) || bytes(P) || m)) mod n.
   const sig = new Uint8Array(64); // Let sig = bytes(R) || bytes((k + ed) mod n).
   sig.set(rx, 0);
-  sig.set(numTo32b(modN(k + e * d)), 32);
+  sig.set(numTo32b(modN(k.add( e.mul(d) ))), 32);
   // If Verify(bytes(P), m, sig) (see below) returns failure, abort
   if (!schnorrVerify(sig, m, px)) throw new Error('sign: Invalid signature produced');
   return sig;
@@ -191,8 +192,8 @@ function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): boolean {
     const s = bytesToNumberBE(sig.subarray(32, 64)); // Let s = int(sig[32:64]); fail if s ≥ n.
     if (!ge(s)) return false;
     const e = challenge(numTo32b(r), pointToBytes(P), m); // int(challenge(bytes(r)||bytes(P)||m))%n
-    const R = GmulAdd(P, s, modN(-e)); // R = s⋅G - e⋅P
-    if (!R || !R.hasEvenY() || R.toAffine().x !== r) return false; // -eP == (n-e)P
+    const R = GmulAdd(P, s, modN(e.negate())); // R = s⋅G - e⋅P
+    if (!R || !R.hasEvenY() || !R.toAffine().x.equal(r)) return false; // -eP == (n-e)P
     return true; // Fail if is_infinite(R) / not has_even_y(R) / x(R) ≠ r.
   } catch (error) {
     return false;
@@ -245,18 +246,18 @@ const isoMap = /* @__PURE__ */ (() =>
         '0x6484aa716545ca2cf3a70c3fa8fe337e0a3d21162f0d6299a7bf8192bfd2a76f',
         '0x0000000000000000000000000000000000000000000000000000000000000001', // LAST 1
       ],
-    ].map((i) => i.map((j) => BigInt(j))) as [bigint[], bigint[], bigint[], bigint[]]
+    ].map((i) => i.map((j) => BigInteger.new(j))) as [BigInteger[], BigInteger[], BigInteger[], BigInteger[]]
   ))();
 const mapSWU = /* @__PURE__ */ (() =>
   mapToCurveSimpleSWU(Fp, {
-    A: BigInt('0x3f8731abdd661adca08a5558f0f5d272e953d363cb6f0e5d405447c01a444533'),
-    B: BigInt('1771'),
-    Z: Fp.create(BigInt('-11')),
+    A: BigInteger.new('0x3f8731abdd661adca08a5558f0f5d272e953d363cb6f0e5d405447c01a444533'),
+    B: BigInteger.new('1771'),
+    Z: Fp.create(BigInteger.new('-11')),
   }))();
 const htf = /* @__PURE__ */ (() =>
   createHasher(
     secp256k1.ProjectivePoint,
-    (scalars: bigint[]) => {
+    (scalars: BigInteger[]) => {
       const { x, y } = mapSWU(Fp.create(scalars[0]));
       return isoMap(x, y);
     },

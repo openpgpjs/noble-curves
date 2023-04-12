@@ -279,9 +279,9 @@ method: check out examples.
 ```ts
 import { weierstrass } from '@noble/curves/abstract/weierstrass';
 import { Field } from '@noble/curves/abstract/modular'; // finite field for mod arithmetics
-import { sha256 } from '@noble/hashes/sha256'; // 3rd-party sha256() of type utils.CHash
-import { hmac } from '@noble/hashes/hmac'; // 3rd-party hmac() that will accept sha256()
-import { concatBytes, randomBytes } from '@noble/hashes/utils'; // 3rd-party utilities
+import { sha256 } from '@openpgp/noble-hashes/sha256'; // 3rd-party sha256() of type utils.CHash
+import { hmac } from '@openpgp/noble-hashes/hmac'; // 3rd-party hmac() that will accept sha256()
+import { concatBytes, randomBytes } from '@openpgp/noble-hashes/utils'; // 3rd-party utilities
 const secq256k1 = weierstrass({
   // secq256k1: cycle of secp256k1 with Fp/N flipped.
   // https://personaelabs.org/posts/spartan-ecdsa
@@ -446,8 +446,8 @@ fast.multiply(privKey); // much faster ECDH now
 ```ts
 import { twistedEdwards } from '@noble/curves/abstract/edwards';
 import { Field } from '@noble/curves/abstract/modular';
-import { sha512 } from '@noble/hashes/sha512';
-import { randomBytes } from '@noble/hashes/utils';
+import { sha512 } from '@openpgp/noble-hashes/sha512';
+import { randomBytes } from '@openpgp/noble-hashes/utils';
 
 const Fp = Field(2n ** 255n - 19n);
 const ed25519 = twistedEdwards({
@@ -681,7 +681,7 @@ Every curve has exported `hashToCurve` and `encodeToCurve` methods. You should a
 
 ```ts
 import { hashToCurve, encodeToCurve } from '@noble/curves/secp256k1';
-import { randomBytes } from '@noble/hashes/utils';
+import { randomBytes } from '@openpgp/noble-hashes/utils';
 hashToCurve('0102abcd');
 console.log(hashToCurve(randomBytes()));
 console.log(encodeToCurve(randomBytes()));
@@ -797,8 +797,8 @@ if you need to hash to **public key**.
 
 ```ts
 import { p256 } from '@noble/curves/p256';
-import { sha256 } from '@noble/hashes/sha256';
-import { hkdf } from '@noble/hashes/hkdf';
+import { sha256 } from '@openpgp/noble-hashes/sha256';
+import { hkdf } from '@openpgp/noble-hashes/hkdf';
 const someKey = new Uint8Array(32).fill(2); // Needs to actually be random, not .fill(2)
 const derived = hkdf(sha256, someKey, undefined, 'application', 48); // 48 bytes for 32-byte priv
 const validPrivateKey = mod.hashToPrivateScalar(derived, p256.CURVE.n);

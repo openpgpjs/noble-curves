@@ -1,13 +1,9 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "esm",
-    "target": "es2020",
     "module": "es6",
-    "moduleResolution": "node16",
-    "baseUrl": ".",
-    "paths": {
-      "@noble/hashes/crypto": ["src/crypto"]
-    },
+    "declaration": true,
     "sourceMap": true,
     "strict": true,
     "allowSyntheticDefaultImports": false,
@@ -20,5 +16,7 @@
     "noUnusedParameters": true,
   },
   "include": ["src"],
-  "exclude": ["node_modules", "lib"]
+  "exclude": [
+    "node_modules"
+  ]
 }

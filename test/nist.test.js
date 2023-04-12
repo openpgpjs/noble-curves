@@ -1,4 +1,6 @@
-import { deepStrictEqual, throws } from 'assert';
+import { BigInteger } from '@openpgp/noble-hashes/biginteger';
+
+import { deepStrictEqual, throws, ok } from 'assert';
 import { describe, should } from 'micro-should';
 import { secp192r1, secp224r1, p192, p224 } from './_more-curves.helpers.js';
 import { DER } from '../esm/abstract/weierstrass.js';
@@ -50,9 +52,9 @@ import { default as secp521r1_sha3_512_test } from './wycheproof/ecdsa_secp521r1
 import { default as secp521r1_sha512_test } from './wycheproof/ecdsa_secp521r1_sha512_test.json' assert { type: 'json' };
 import { default as secp521r1_shake256_test } from './wycheproof/ecdsa_secp521r1_shake256_test.json' assert { type: 'json' };
 
-import { sha3_224, sha3_256, sha3_384, sha3_512, shake128, shake256 } from '@noble/hashes/sha3';
-import { sha512, sha384 } from '@noble/hashes/sha512';
-import { sha224, sha256 } from '@noble/hashes/sha256';
+import { sha3_224, sha3_256, sha3_384, sha3_512, shake128, shake256 } from '@openpgp/noble-hashes/sha3';
+import { sha512, sha384 } from '@openpgp/noble-hashes/sha512';
+import { sha224, sha256 } from '@openpgp/noble-hashes/sha256';
 
 // TODO: maybe add to noble-hashes?
 const wrapShake = (shake, dkLen) => {
@@ -69,6 +71,7 @@ const shake256_384 = wrapShake(shake256, 384 / 8);
 const shake256_512 = wrapShake(shake256, 512 / 8);
 
 const hex = bytesToHex;
+const equalBigInteger = (actual, expected, msg) => ok(actual.toString() === expected.toString(), msg);
 
 // prettier-ignore
 const NIST = {
@@ -83,14 +86,14 @@ const NIST = {
 describe('NIST curves', () => {});
 should('fields', () => {
   const vectors = {
-    secp192r1: 0xfffffffffffffffffffffffffffffffeffffffffffffffffn,
-    secp224r1: 0xffffffffffffffffffffffffffffffff000000000000000000000001n,
-    secp256r1: 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffffn,
-    secp256k1: 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn,
+    secp192r1: BigInteger.new('0xfffffffffffffffffffffffffffffffeffffffffffffffff'),
+    secp224r1: BigInteger.new('0xffffffffffffffffffffffffffffffff000000000000000000000001'),
+    secp256r1: BigInteger.new('0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff'),
+    secp256k1: BigInteger.new('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f'),
     secp384r1:
-      0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000ffffffffn,
+      BigInteger.new('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000ffffffff'),
     secp521r1:
-      0x01ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffn,
+      BigInteger.new('0x01ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'),
   };
   for (const n in vectors) deepStrictEqual(NIST[n].CURVE.Fp.ORDER, vectors[n]);
 });
@@ -317,8 +320,8 @@ const WYCHEPROOF_ECDSA = {
 function runWycheproof(name, CURVE, group, index) {
   const key = group.publicKey;
   const pubKey = CURVE.ProjectivePoint.fromHex(key.uncompressed);
-  deepStrictEqual(pubKey.x, BigInt(`0x${key.wx}`));
-  deepStrictEqual(pubKey.y, BigInt(`0x${key.wy}`));
+  equalBigInteger(pubKey.x, BigInt(`0x${key.wx}`));
+  equalBigInteger(pubKey.y, BigInt(`0x${key.wy}`));
   const pubR = pubKey.toRawBytes();
   for (const test of group.tests) {
     const m = CURVE.CURVE.hash(hexToBytes(test.msg));
@@ -360,8 +363,8 @@ describe('wycheproof ECDSA', () => {
         if (group.sha === 'SHA-256') CURVE = CURVE.create(sha256);
       }
       const pubKey = CURVE.ProjectivePoint.fromHex(group.key.uncompressed);
-      deepStrictEqual(pubKey.x, BigInt(`0x${group.key.wx}`));
-      deepStrictEqual(pubKey.y, BigInt(`0x${group.key.wy}`));
+      equalBigInteger(pubKey.x, BigInt(`0x${group.key.wx}`));
+      equalBigInteger(pubKey.y, BigInt(`0x${group.key.wy}`));
       for (const test of group.tests) {
         if (['Hash weaker than DL-group'].includes(test.comment)) {
           continue;
@@ -417,7 +420,7 @@ describe('wycheproof ECDSA', () => {
   }
 });
 
-const hexToBigint = (hex) => BigInt(`0x${hex}`);
+const hexToBigint = (hex) => BigInteger.new(`0x${hex}`);
 describe('RFC6979', () => {
   for (const v of rfc6979) {
     should(v.curve, () => {
@@ -425,29 +428,34 @@ describe('RFC6979', () => {
       deepStrictEqual(curve.CURVE.n, hexToBigint(v.q));
       const pubKey = curve.getPublicKey(v.private);
       const pubPoint = curve.ProjectivePoint.fromHex(pubKey);
-      deepStrictEqual(pubPoint.x, hexToBigint(v.Ux));
-      deepStrictEqual(pubPoint.y, hexToBigint(v.Uy));
+      equalBigInteger(pubPoint.x, hexToBigint(v.Ux));
+      equalBigInteger(pubPoint.y, hexToBigint(v.Uy));
       for (const c of v.cases) {
         const h = curve.CURVE.hash(c.message);
         const sigObj = curve.sign(h, v.private);
-        deepStrictEqual(sigObj.r, hexToBigint(c.r), 'R');
-        deepStrictEqual(sigObj.s, hexToBigint(c.s), 'S');
+        equalBigInteger(sigObj.r, hexToBigint(c.r), 'R');
+        equalBigInteger(sigObj.s, hexToBigint(c.s), 'S');
         deepStrictEqual(curve.verify(sigObj.toDERRawBytes(), h, pubKey), true, 'verify(1)');
         deepStrictEqual(curve.verify(sigObj, h, pubKey), true, 'verify(2)');
       }
     });
   }
 });
-
+function deepStrictEqualBN(obj1, obj2) {
+  const keys = Object.keys(obj1);
+  if (!deepStrictEqual(keys, Object.keys(obj2))) return false;
+  const res = keys.map(key => obj1[key] instanceof BigInteger ? obj1[key].equal(obj2[key]) : deepStrictEqual(obj1[key], obj2[key]));
+  return res.every(Boolean);
+}
 should('properly add leading zero to DER', () => {
   // Valid DER
-  deepStrictEqual(
+  deepStrictEqualBN(
     DER.toSig(
       '303c021c70049af31f8348673d56cece2b27e587a402f2a48f0b21a7911a480a021c2840bf24f6f66be287066b7cbf38788e1b7770b18fd1aa6a26d7c6dc'
     ),
     {
-      r: 11796871166002955884468185727465595477481802908758874298363724580874n,
-      s: 4239126896857047637966364941684493209162496401998708914961872570076n,
+      r: BigInteger.new('11796871166002955884468185727465595477481802908758874298363724580874'),
+      s: BigInteger.new('4239126896857047637966364941684493209162496401998708914961872570076'),
     }
   );
   // Invalid DER (missing trailing zero)
@@ -457,10 +465,10 @@ should('properly add leading zero to DER', () => {
     )
   );
   // Correctly adds trailing zero
-  deepStrictEqual(
+  deepStrictEqualBN(
     DER.hexFromSig({
-      r: 11796871166002955884468185727465595477481802908758874298363724580874n,
-      s: 22720819770293592156700650145335132731295311312425682806720849797985n,
+      r: BigInteger.new('11796871166002955884468185727465595477481802908758874298363724580874'),
+      s: BigInteger.new('22720819770293592156700650145335132731295311312425682806720849797985'),
     }),
     '303d021c70049af31f8348673d56cece2b27e587a402f2a48f0b21a7911a480a021d00d7bf40db0909941d78f9948340c69e14c5417f8c840b7edb35846361'
   );
@@ -469,10 +477,10 @@ should('properly add leading zero to DER', () => {
 should('have proper GLV endomorphism logic in secp256k1', () => {
   const Point = secp256k1.ProjectivePoint;
   for (let item of endoVectors) {
-    const point = Point.fromAffine({ x: BigInt(item.ax), y: BigInt(item.ay) });
-    const c = point.multiplyUnsafe(BigInt(item.scalar)).toAffine();
-    deepStrictEqual(c.x, BigInt(item.cx));
-    deepStrictEqual(c.y, BigInt(item.cy));
+    const point = Point.fromAffine({ x: BigInteger.new(item.ax), y: BigInteger.new(item.ay) });
+    const c = point.multiplyUnsafe(BigInteger.new(item.scalar)).toAffine();
+    equalBigInteger(c.x, BigInt(item.cx));
+    equalBigInteger(c.y, BigInt(item.cy));
   }
 });
 

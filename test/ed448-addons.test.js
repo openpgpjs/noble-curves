@@ -1,4 +1,5 @@
-import { bytesToHex as hex, hexToBytes } from '@noble/hashes/utils';
+import { BigInteger } from '@openpgp/noble-hashes/biginteger';
+import { bytesToHex as hex, hexToBytes } from '@openpgp/noble-hashes/utils';
 import { deepStrictEqual, throws } from 'assert';
 import { describe, should } from 'micro-should';
 import { bytesToNumberLE } from '../esm/abstract/utils.js';
@@ -94,10 +95,10 @@ describe('decaf448', () => {
     }
   });
   should('have proper equality testing', () => {
-    const MAX_448B = BigInt(
+    const MAX_448B = BigInteger.new(
       '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
     );
-    const bytes448ToNumberLE = (bytes) => ed448.CURVE.Fp.create(bytesToNumberLE(bytes) & MAX_448B);
+    const bytes448ToNumberLE = (bytes) => ed448.CURVE.Fp.create(bytesToNumberLE(bytes).ibitwiseAnd(MAX_448B));
 
     const priv = new Uint8Array([
       23, 211, 149, 179, 209, 108, 78, 37, 229, 45, 122, 220, 85, 38, 192, 182, 96, 40, 168, 63,
