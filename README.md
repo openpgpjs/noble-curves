@@ -1,5 +1,10 @@
 # noble-curves
 
+> This fork adds support for legacy browsers without BigInt (e.g. Safari 13 or less), and only includes hash algorithms needed by openpgpjs: Curve25519, Curve448, NIST curves and Secp256k1.<br>
+We recommend you use the upstream repo. The rest of the README refers to the upstream library.
+
+<hr>
+
 Audited & minimal JS implementation of elliptic curve cryptography.
 
 - 🔒 [**Audited**](#security) by an independent security firm
@@ -32,7 +37,7 @@ packages. See [Resources](#resources) for articles and real-world software that 
 
 ## Usage
 
-> npm install @noble/curves
+> npm install @openpgp/noble-curves
 
 We support all major platforms and runtimes.
 For [Deno](https://deno.land), ensure to use [npm specifier](https://deno.land/manual@v1.28.0/node/npm_specifiers).
