@@ -129,7 +129,7 @@ export const x448 = /* @__PURE__ */ (() =>
   montgomery({
     a: BigInteger.new(156326),
     montgomeryBits: 448,
-    nByteLength: 57,
+    nByteLength: 56,
     P: ed448P,
     Gu: BigInteger.new(5),
     powPminus2: (x: BigInteger): BigInteger => {
