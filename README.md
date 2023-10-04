@@ -1,6 +1,6 @@
 # noble-curves
 
-> This fork adds support for legacy browsers without BigInt (e.g. Safari 13 or less), and only includes hash algorithms needed by openpgpjs: Curve25519, Curve448, NIST curves and Secp256k1.<br>
+> This fork adds support for legacy browsers without BigInt (e.g. Safari 13 or less), and only includes hash algorithms needed by openpgpjs: Curve25519, Curve448, NIST curves and Secp256k1. It also adds some Brainpool curves.<br>
 We recommend you use the upstream repo. The rest of the README refers to the upstream library.
 
 <hr>
