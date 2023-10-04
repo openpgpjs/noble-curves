@@ -12,6 +12,7 @@ import './ed25519.test.js';
 import './ed25519-addons.test.js';
 import './secp256k1.test.js';
 import './secp256k1-schnorr.test.js';
+import './brainpool.test.js';
 // import './hash-to-curve.test.js';
 // import './poseidon.test.js';
 // import './bls12-381.test.js';

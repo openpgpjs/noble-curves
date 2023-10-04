@@ -51,12 +51,6 @@
   "sideEffects": false,
   "main": "index.js",
   "exports": {
-    "./abstract/utils": {
-      "import": "./esm/abstract/utils.js"
-    },
-    "./_shortw_utils": {
-      "import": "./esm/_shortw_utils.js"
-    },
     "./ed25519": {
       "import": "./esm/ed25519.js"
     },
@@ -77,6 +71,15 @@
     },
     "./secp256k1": {
       "import": "./esm/secp256k1.js"
+    },
+    "./brainpoolP256r1": {
+      "import": "./esm/brainpoolP256r1.js"
+    },
+    "./brainpoolP384r1": {
+      "import": "./esm/brainpoolP384r1.js"
+    },
+    "./brainpoolP512r1": {
+      "import": "./esm/brainpoolP512r1.js"
     }
   },
   "keywords": [
