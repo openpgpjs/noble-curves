@@ -404,6 +404,11 @@ describe('ed448', () => {
       const signature = ed.sign(msg, privKey);
       deepStrictEqual(ed.verify(signature, wrongMsg, publicKey), false);
     });
+    should('sign with validation and verify', () => {
+      const publicKey = ed.getPublicKey(privKey);
+      const signature = ed.sign(msg, privKey, { validate: true });
+      deepStrictEqual(ed.verify(signature, msg, publicKey), true);
+    });
   });
   describe('sync methods', () => {
     should('sign and verify', () => {

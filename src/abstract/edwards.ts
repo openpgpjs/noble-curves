@@ -448,7 +448,7 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
   }
 
   /** Signs message with privateKey. RFC8032 5.1.6 */
-  function sign(msg: Hex, privKey: Hex, options: { context?: Hex } = {}): Uint8Array {
+  function sign(msg: Hex, privKey: Hex, options: { context?: Hex, validate?: boolean } = {}): Uint8Array {
     msg = ensureBytes('message', msg);
     if (prehash) msg = prehash(msg); // for ed25519ph etc.
     const { prefix, scalar, pointBytes } = getExtendedPublicKey(privKey);
@@ -457,6 +457,29 @@ export function twistedEdwards(curveDef: CurveType): CurveFn {
     const k = hashDomainToScalar(options.context, R, pointBytes, msg); // R || A || PH(M)
     const s = modN(r.add( k.mul(scalar) )); // S = (r + k * s) mod L
     assertGE0(s); // 0 <= s < l
+    if (options.validate) {
+      /**
+       * Detect faulty signatures caused by random bitflips which could lead to private key extraction
+       * if two signatures over the same message are obtained.
+       * See https://github.com/jedisct1/libsodium/issues/170.
+       * If the input data is not deterministic, e.g. thanks to the random salt in v6 OpenPGP signatures, then the generated signature
+       * is always safe, and the validation step is not needed.
+       * Otherwise, we need to check intermediate values to ensure that no bitflip corrupted the value of `h` (but not `r`),
+       * namely we want to rule out bitflips occurring:
+       * - in M between the computation of `r` and `h`.
+       * - when computing `R`
+       * - in the public key before computing `h`
+       * An alternative to these low-level checks would be to verify the generated signature, but this is less efficient since
+       * doing so here requires re-deriving the public key anyway.
+       */
+      const { pointBytes: pointBytesCompare } = getExtendedPublicKey(privKey);
+      const rCompare = hashDomainToScalar(options.context, prefix, msg);
+      const RCompare = G.multiply(r).toRawBytes();
+      const kCompare = hashDomainToScalar(options.context, R, pointBytesCompare, msg);
+      if (!r.equal(rCompare) || !ut.equalBytes(R, RCompare) || !ut.equalBytes(pointBytes, pointBytesCompare) || !k.equal(kCompare)) {
+        throw new Error('transient signing failure');
+      }
+    }
     const res = ut.concatBytes(R, s.toUint8Array('le', Fp.BYTES));
     return ensureBytes('result', res, nByteLength * 2); // 64-byte signature
   }
